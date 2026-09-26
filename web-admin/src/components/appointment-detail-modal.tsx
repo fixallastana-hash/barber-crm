@@ -58,7 +58,9 @@ export function AppointmentDetailModal({ appointment, onClose, onUpdated }: Prop
             { label: 'Подтвердить', status: 'confirmed', className: 'bg-blue-600 hover:bg-blue-700' },
             { label: 'Отменить', status: 'cancelled', className: 'bg-red-600 hover:bg-red-700' },
           ]
-        : [];
+        : appointment.status === 'noshow'
+          ? [{ label: 'Клиент пришёл (завершить)', status: 'completed', className: 'bg-green-600 hover:bg-green-700' }]
+          : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -87,9 +89,13 @@ export function AppointmentDetailModal({ appointment, onClose, onUpdated }: Prop
 
         {error && <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <div className="mt-6 flex flex-wrap justify-end gap-2">
-          {actions.length === 0 ? (
+          {actions.length === 0 && (
             <button type="button" onClick={onClose} className="rounded bg-gray-200 px-4 py-2 text-sm hover:bg-gray-300">Закрыть</button>
-          ) : actions.map((action) => (
+          )}
+          {appointment.status === 'noshow' && (
+            <button type="button" onClick={onClose} className="rounded bg-gray-200 px-4 py-2 text-sm hover:bg-gray-300">Закрыть</button>
+          )}
+          {actions.map((action) => (
             <button key={action.status} type="button" disabled={updating}
               onClick={() => void updateStatus(action.status)}
               className={'rounded px-4 py-2 text-sm text-white disabled:opacity-50 ' + action.className}>

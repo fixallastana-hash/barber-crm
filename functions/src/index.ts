@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 
 admin.initializeApp();
@@ -776,3 +777,77 @@ export const updateAppointmentStatus = onCall(async (request) => {
 
   return { success: true };
 });
+
+// ============ autoNoshow (cron every 30 minutes) ============
+
+export const autoNoshow = onSchedule(
+  {
+    schedule: 'every 30 minutes',
+    timeZone: 'Asia/Almaty',
+  },
+  async () => {
+    const now = new Date();
+    const thresholdMs = 60 * 60 * 1000;
+    const cutoff = new Date(now.getTime() - thresholdMs);
+
+    const tenantsSnap = await db.collection('tenants').get();
+    let totalProcessed = 0;
+
+    for (const tenantDoc of tenantsSnap.docs) {
+      const tenantId = tenantDoc.id;
+      const apptsSnap = await db
+        .collection('tenants/' + tenantId + '/appointments')
+        .where('status', '==', 'confirmed')
+        .get();
+
+      const infoSnap = await db.doc('tenants/' + tenantId + '/config/info').get();
+      const noshowThreshold = (infoSnap.data()?.noshowBlockThreshold as number) || 3;
+
+      for (const apptDoc of apptsSnap.docs) {
+        const appt = apptDoc.data();
+        const dateStr = appt.date as string;
+        const startMinutes = appt.startMinutes as number;
+
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const startUtc = Date.UTC(
+          y,
+          m - 1,
+          d,
+          Math.floor(startMinutes / 60) - 5,
+          startMinutes % 60
+        );
+        const startDate = new Date(startUtc);
+
+        if (startDate.getTime() >= cutoff.getTime()) {
+          continue;
+        }
+
+        await apptDoc.ref.update({
+          status: 'noshow',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        const clientId = appt.clientId as string;
+        if (clientId) {
+          const clientRef = db.doc('tenants/' + tenantId + '/clients/' + clientId);
+          const clientSnap = await clientRef.get();
+          if (clientSnap.exists) {
+            const client = clientSnap.data()!;
+            const newNoshowCount = ((client.noshowCount as number) || 0) + 1;
+            const updates: Record<string, unknown> = {
+              noshowCount: newNoshowCount,
+            };
+            if (newNoshowCount >= noshowThreshold) {
+              updates.isBlocked = true;
+            }
+            await clientRef.update(updates);
+          }
+        }
+
+        totalProcessed += 1;
+      }
+    }
+
+    console.log('autoNoshow: processed ' + totalProcessed + ' appointments');
+  }
+);

@@ -12,6 +12,7 @@ type Client = {
   phoneNormalized: string;
   totalVisits: number;
   totalSpentKzt: number;
+  noshowCount: number;
   isBlocked: boolean;
 };
 
@@ -106,30 +107,17 @@ export default function ClientsPage() {
         <form onSubmit={handleCreate} className="mb-6 grid gap-4 rounded-lg bg-white p-6 shadow md:grid-cols-2">
           <label className="block">
             <span className="text-sm text-gray-700">Имя *</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              required
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
+            <input type="text" value={name} onChange={(event) => setName(event.target.value)} required
+              className="mt-1 w-full rounded border px-3 py-2" />
           </label>
           <label className="block">
             <span className="text-sm text-gray-700">Телефон *</span>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              required
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
+            <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required
+              className="mt-1 w-full rounded border px-3 py-2" />
           </label>
           <div className="md:col-span-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-            >
+            <button type="submit" disabled={saving}
+              className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
               {saving ? 'Создание...' : 'Создать клиента'}
             </button>
           </div>
@@ -138,13 +126,8 @@ export default function ClientsPage() {
 
       <label className="mb-4 block max-w-md">
         <span className="sr-only">Поиск клиентов</span>
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Поиск по имени или телефону"
-          className="w-full rounded border bg-white px-3 py-2"
-        />
+        <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+          placeholder="Поиск по имени или телефону" className="w-full rounded border bg-white px-3 py-2" />
       </label>
 
       {filteredClients.length === 0 ? (
@@ -160,6 +143,7 @@ export default function ClientsPage() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Телефон</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Визитов</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Потрачено</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Неявок</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Статус</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Действие</th>
               </tr>
@@ -170,16 +154,14 @@ export default function ClientsPage() {
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{client.name}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{client.phoneNormalized}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{client.totalVisits ?? 0}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {(client.totalSpentKzt ?? 0).toLocaleString('ru-RU')} ₸
+                  <td className="px-4 py-3 text-sm text-gray-600">{(client.totalSpentKzt ?? 0).toLocaleString('ru-RU')} ₸</td>
+                  <td className={'px-4 py-3 text-sm ' + ((client.noshowCount ?? 0) >= 3 ? 'font-medium text-red-600' : 'text-gray-600')}>
+                    {client.noshowCount ?? 0}
                   </td>
                   <td className="px-4 py-3 text-sm">{client.isBlocked ? 'Заблокирован' : 'Активен'}</td>
                   <td className="px-4 py-3 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => void handleBlockToggle(client)}
-                      className={client.isBlocked ? 'text-green-700 hover:text-green-800' : 'text-red-600 hover:text-red-700'}
-                    >
+                    <button type="button" onClick={() => void handleBlockToggle(client)}
+                      className={client.isBlocked ? 'text-green-700 hover:text-green-800' : 'text-red-600 hover:text-red-700'}>
                       {client.isBlocked ? 'Разблокировать' : 'Заблокировать'}
                     </button>
                   </td>
