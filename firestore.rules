@@ -46,6 +46,15 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /clients/{clientId} {
+        allow read: if isOwnerOrAdmin(tenantId);
+        allow write: if false;
+      }
+
+      match /clientPhoneIndex/{phone} {
+        allow read, write: if false;
+      }
+
       match /{document=**} {
         allow read, write: if false;
       }

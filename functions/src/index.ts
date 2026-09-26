@@ -377,3 +377,104 @@ export const deactivateService = onCall(async (request) => {
 
   return { success: true };
 });
+
+
+
+// ============ helpers для клиентов ============
+
+function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('8')) {
+    return '+7' + digits.slice(1);
+  }
+  if (digits.length === 11 && digits.startsWith('7')) {
+    return '+' + digits;
+  }
+  if (digits.length === 10) {
+    return '+7' + digits;
+  }
+  return '+' + digits;
+}
+
+// ============ createClient ============
+
+export const createClient = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const name = data.name;
+  const phone = data.phone;
+  if (!name) throw new HttpsError('invalid-argument', 'name is required');
+  if (!phone) throw new HttpsError('invalid-argument', 'phone is required');
+
+  const phoneNormalized = normalizePhone(phone);
+
+  const indexRef = db.doc('tenants/' + tenantId + '/clientPhoneIndex/' + phoneNormalized);
+  const existing = await indexRef.get();
+  if (existing.exists) {
+    throw new HttpsError('already-exists', 'Client with this phone already exists');
+  }
+
+  const clientId = db.collection('tenants/' + tenantId + '/clients').doc().id;
+  const batch = db.batch();
+
+  batch.set(db.doc('tenants/' + tenantId + '/clients/' + clientId), {
+    name,
+    phoneNormalized,
+    nameVariants: [],
+    totalVisits: 0,
+    totalSpentKzt: 0,
+    noshowCount: 0,
+    isBlocked: false,
+    marketingOptOut: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    _schemaVersion: 4,
+  });
+
+  batch.set(indexRef, { clientId });
+  await batch.commit();
+
+  return { success: true, clientId };
+});
+
+// ============ updateClient ============
+
+export const updateClient = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const clientId = data.clientId;
+  if (!clientId) throw new HttpsError('invalid-argument', 'clientId is required');
+
+  const allowed = ['name', 'marketingOptOut', 'isBlocked'];
+  const updates: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (data[key] !== undefined) updates[key] = data[key];
+  }
+  if (Object.keys(updates).length === 0) {
+    throw new HttpsError('invalid-argument', 'No valid fields to update');
+  }
+
+  await db.doc('tenants/' + tenantId + '/clients/' + clientId).update(updates);
+  return { success: true };
+});
+
+// ============ blockClient ============
+
+export const blockClient = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const clientId = data.clientId;
+  const blocked = data.blocked === true;
+  if (!clientId) throw new HttpsError('invalid-argument', 'clientId is required');
+
+  await db.doc('tenants/' + tenantId + '/clients/' + clientId).update({
+    isBlocked: blocked,
+  });
+
+  return { success: true };
+});
