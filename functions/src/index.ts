@@ -278,3 +278,102 @@ export const deactivateMaster = onCall(async (request) => {
 
   return { success: true };
 });
+
+
+// ============ createCategory ============
+
+export const createCategory = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const name = data.name;
+  if (!name) throw new HttpsError('invalid-argument', 'name is required');
+
+  const categoryId = db.collection('tenants/' + tenantId + '/categories').doc().id;
+  await db.doc('tenants/' + tenantId + '/categories/' + categoryId).set({
+    name,
+    order: data.order || 0,
+    isActive: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { success: true, categoryId };
+});
+
+// ============ createService ============
+
+export const createService = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const name = data.name;
+  const categoryId = data.categoryId;
+  const durationMinutes = data.durationMinutes;
+  const priceKzt = data.priceKzt;
+
+  if (!name) throw new HttpsError('invalid-argument', 'name is required');
+  if (!categoryId) throw new HttpsError('invalid-argument', 'categoryId is required');
+  if (!durationMinutes) throw new HttpsError('invalid-argument', 'durationMinutes is required');
+  if (priceKzt === undefined) throw new HttpsError('invalid-argument', 'priceKzt is required');
+
+  const catSnap = await db.doc('tenants/' + tenantId + '/categories/' + categoryId).get();
+  if (!catSnap.exists) throw new HttpsError('not-found', 'Category not found');
+  const categoryName = catSnap.data()!.name as string;
+
+  const serviceId = db.collection('tenants/' + tenantId + '/services').doc().id;
+  await db.doc('tenants/' + tenantId + '/services/' + serviceId).set({
+    name,
+    categoryId,
+    categoryName,
+    durationMinutes: Number(durationMinutes),
+    bufferMinutes: Number(data.bufferMinutes || 0),
+    priceKzt: Number(priceKzt),
+    order: Number(data.order || 0),
+    isActive: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { success: true, serviceId };
+});
+
+// ============ updateService ============
+
+export const updateService = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const serviceId = data.serviceId;
+  if (!serviceId) throw new HttpsError('invalid-argument', 'serviceId is required');
+
+  const allowed = ['name', 'durationMinutes', 'bufferMinutes', 'priceKzt', 'order'];
+  const updates: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (data[key] !== undefined) updates[key] = data[key];
+  }
+  if (Object.keys(updates).length === 0) {
+    throw new HttpsError('invalid-argument', 'No valid fields to update');
+  }
+
+  await db.doc('tenants/' + tenantId + '/services/' + serviceId).update(updates);
+  return { success: true };
+});
+
+// ============ deactivateService ============
+
+export const deactivateService = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const serviceId = data.serviceId;
+  if (!serviceId) throw new HttpsError('invalid-argument', 'serviceId is required');
+
+  await db.doc('tenants/' + tenantId + '/services/' + serviceId).update({
+    isActive: false,
+  });
+
+  return { success: true };
+});
