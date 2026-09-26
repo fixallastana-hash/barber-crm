@@ -8,11 +8,11 @@ const auth = admin.auth();
 
 setGlobalOptions({ region: 'asia-east1' });
 
-export const helloWorld = onCall(() => {
+export const helloWorld = onCall({ invoker: 'public' }, () => {
   return { message: 'Hello from Barber CRM Functions' };
 });
 
-export const registerSalon = onCall(async (request) => {
+export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
   const data = request.data || {};
   const salonName = data.salonName;
   const email = data.email;
