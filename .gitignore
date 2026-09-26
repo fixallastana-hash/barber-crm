@@ -11,3 +11,11 @@ dist/
 
 .DS_Store
 .vscode/
+functions/lib/
+functions/*.tsbuildinfo
+web-admin/out/
+web-admin/.next/
+web-widget/out/
+web-widget/.next/
+web-admin/next-env.d.ts
+web-widget/next-env.d.ts
