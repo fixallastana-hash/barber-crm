@@ -56,9 +56,17 @@ service cloud.firestore {
       }
 
       match /users/{userId} {
-        allow read: if isOwner(tenantId)
-          || (request.auth.uid == userId);
+        allow read: if isOwner(tenantId) || (request.auth.uid == userId);
         allow write: if false;
+      }
+
+      match /appointments/{appointmentId} {
+        allow read: if isOwnerOrAdmin(tenantId);
+        allow write: if false;
+      }
+
+      match /ledger/{ledgerId} {
+        allow read, write: if false;
       }
 
       match /{document=**} {
