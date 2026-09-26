@@ -968,3 +968,105 @@ export const onAppointmentCreated = onDocumentCreated(
     console.log('Enqueued: ' + appointmentId);
   }
 );
+
+// ============ generateMasterToken ============
+
+export const generateMasterToken = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const masterId = data.masterId;
+  if (!masterId) {
+    throw new HttpsError('invalid-argument', 'masterId is required');
+  }
+
+  const masterRef = db.doc('tenants/' + tenantId + '/masters/' + masterId);
+  const masterSnap = await masterRef.get();
+  if (!masterSnap.exists) {
+    throw new HttpsError('not-found', 'Master not found');
+  }
+
+  const crypto = await import('crypto');
+  const token = crypto.randomBytes(24).toString('hex');
+
+  await masterRef.update({
+    accessToken: token,
+    accessTokenGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { success: true, token };
+});
+
+// ============ getMasterSchedule (public, by token) ============
+
+export const getMasterSchedule = onCall(
+  { invoker: 'public' },
+  async (request) => {
+    const data = request.data || {};
+    const token = data.token;
+    const dateFrom = data.dateFrom;
+    const dateTo = data.dateTo;
+
+    if (!token || typeof token !== 'string') {
+      throw new HttpsError('invalid-argument', 'token is required');
+    }
+    if (!dateFrom || !dateTo) {
+      throw new HttpsError('invalid-argument', 'dateFrom and dateTo required');
+    }
+
+    const mastersSnap = await db
+      .collectionGroup('masters')
+      .where('accessToken', '==', token)
+      .limit(1)
+      .get();
+
+    if (mastersSnap.empty) {
+      throw new HttpsError('not-found', 'Invalid token');
+    }
+
+    const masterDoc = mastersSnap.docs[0];
+    const master = masterDoc.data();
+    const masterId = masterDoc.id;
+    const pathParts = masterDoc.ref.path.split('/');
+    const tenantId = pathParts[1];
+
+    if (!master.isActive) {
+      throw new HttpsError('permission-denied', 'Master is not active');
+    }
+
+    const apptsSnap = await db
+      .collection('tenants/' + tenantId + '/appointments')
+      .where('masterId', '==', masterId)
+      .where('date', '>=', dateFrom)
+      .where('date', '<=', dateTo)
+      .get();
+
+    const appointments = apptsSnap.docs
+      .map((d) => {
+        const a = d.data();
+        return {
+          id: d.id,
+          date: a.date,
+          startMinutes: a.startMinutes,
+          endMinutes: a.endMinutes,
+          clientName: a.clientName,
+          serviceNames: a.serviceNames,
+          status: a.status,
+        };
+      })
+      .filter((a) => a.status !== 'cancelled');
+
+    appointments.sort((a, b) => {
+      if (a.date < b.date) return -1;
+      if (a.date > b.date) return 1;
+      return a.startMinutes - b.startMinutes;
+    });
+
+    return {
+      success: true,
+      masterName: master.name,
+      appointments,
+    };
+  }
+);

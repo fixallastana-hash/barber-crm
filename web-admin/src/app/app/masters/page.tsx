@@ -90,6 +90,19 @@ export default function MastersPage() {
     }
   };
 
+  const handleCopyLink = async (masterId: string) => {
+    try {
+      const generateMasterToken = httpsCallable(getFirebaseFunctions(), 'generateMasterToken');
+      const result = await generateMasterToken({ masterId });
+      const data = result.data as { token: string };
+      const url = 'http://localhost:3001/master?token=' + data.token;
+      await navigator.clipboard.writeText(url);
+      window.alert('Ссылка скопирована:\n\n' + url + '\n\nОтправьте её мастеру. Он сохранит на главный экран.');
+    } catch (err) {
+      window.alert('Ошибка: ' + (err instanceof Error ? err.message : 'неизвестная ошибка'));
+    }
+  };
+
   if (loading) return <p>Загрузка...</p>;
 
   return (
@@ -168,12 +181,20 @@ export default function MastersPage() {
                     {master.whatsappNumber} · {branchName} · {master.type === 'renter' ? 'Арендатор' : 'Сотрудник'}
                   </p>
                 </div>
-                {master.isActive && (
-                  <button type="button" onClick={() => void handleDeactivate(master.id)}
-                    className="text-sm text-red-600 hover:text-red-700">
-                    Деактивировать
-                  </button>
-                )}
+                <div className="flex shrink-0 items-center">
+                  {master.isActive && (
+                    <>
+                      <button type="button" onClick={() => void handleCopyLink(master.id)}
+                        className="mr-3 text-sm text-blue-600 hover:text-blue-700">
+                        Ссылка для мастера
+                      </button>
+                      <button type="button" onClick={() => void handleDeactivate(master.id)}
+                        className="text-sm text-red-600 hover:text-red-700">
+                        Деактивировать
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
