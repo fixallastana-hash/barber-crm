@@ -5,33 +5,34 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
 const navItems = [
-  { href: '/app', label: 'Р”Р°С€Р±РѕСЂРґ' },
-  { href: '/app/settings', label: 'РЎР°Р»РѕРЅ' },
-  { href: '/app/branches', label: 'Р¤РёР»РёР°Р»С‹' },
-  { href: '/app/masters', label: 'РњР°СЃС‚РµСЂР°' },
-  { href: '/app/services', label: 'РЈСЃР»СѓРіРё' },
-  { href: '/app/clients', label: 'РљР»РёРµРЅС‚С‹' },
+  { href: '/app', label: 'Дашборд' },
+  { href: '/app/settings', label: 'Салон' },
+  { href: '/app/branches', label: 'Филиалы' },
+  { href: '/app/masters', label: 'Мастера' },
+  { href: '/app/services', label: 'Услуги' },
+  { href: '/app/clients', label: 'Клиенты' },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const items = user?.role === 'owner'
-    ? [...navItems, { href: '/app/users', label: 'Пользователи' }]
-    : navItems;
 
   const handleSignOut = async () => {
     await signOut();
     router.push('/login');
   };
 
+  const items = user?.role === 'owner'
+    ? [...navItems, { href: '/app/users', label: 'Пользователи' }]
+    : navItems;
+
   return (
     <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4 flex flex-col">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Barber CRM</h2>
         <p className="text-xs text-gray-500 mt-1">{user?.email}</p>
-        <p className="text-xs text-gray-400">Р РѕР»СЊ: {user?.role}</p>
+        <p className="text-xs text-gray-400">Роль: {user?.role}</p>
       </div>
       <nav className="flex-1 space-y-1">
         {items.map((item) => {
@@ -55,9 +56,8 @@ export function Sidebar() {
         onClick={handleSignOut}
         className="mt-4 text-sm text-red-600 hover:text-red-700 text-left px-3 py-2"
       >
-        Р’С‹Р№С‚Рё
+        Выйти
       </button>
     </aside>
   );
 }
-
