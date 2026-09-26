@@ -28,13 +28,9 @@ function requireOwnerOrAdmin(role: string | undefined) {
   }
 }
 
-// ============ helloWorld ============
-
 export const helloWorld = onCall({ invoker: 'public' }, () => {
   return { message: 'Hello from Barber CRM Functions' };
 });
-
-// ============ registerSalon ============
 
 export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
   const data = request.data || {};
@@ -102,8 +98,6 @@ export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
   return { success: true, tenantId: tenantId, uid: uid };
 });
 
-// ============ updateSalonInfo ============
-
 export const updateSalonInfo = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -129,8 +123,6 @@ export const updateSalonInfo = onCall(async (request) => {
 
   return { success: true };
 });
-
-// ============ createBranch ============
 
 export const createBranch = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
@@ -164,8 +156,6 @@ export const createBranch = onCall(async (request) => {
   return { success: true, branchId };
 });
 
-// ============ updateBranch ============
-
 export const updateBranch = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -188,8 +178,6 @@ export const updateBranch = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ deactivateBranch ============
-
 export const deactivateBranch = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -199,6 +187,92 @@ export const deactivateBranch = onCall(async (request) => {
   if (!branchId) throw new HttpsError('invalid-argument', 'branchId is required');
 
   await db.doc('tenants/' + tenantId + '/branches/' + branchId).update({
+    isActive: false,
+  });
+
+  return { success: true };
+});
+
+// ============ createMaster ============
+
+export const createMaster = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const name = data.name;
+  const whatsappNumber = data.whatsappNumber;
+  if (!name) throw new HttpsError('invalid-argument', 'name is required');
+  if (!whatsappNumber) throw new HttpsError('invalid-argument', 'whatsappNumber is required');
+
+  const masterId = db.collection('tenants/' + tenantId + '/masters').doc().id;
+
+  const defaultSchedule = {
+    mon: { isWorking: true, shifts: [{ start: 600, end: 1200, branchId: '' }] },
+    tue: { isWorking: true, shifts: [{ start: 600, end: 1200, branchId: '' }] },
+    wed: { isWorking: true, shifts: [{ start: 600, end: 1200, branchId: '' }] },
+    thu: { isWorking: true, shifts: [{ start: 600, end: 1200, branchId: '' }] },
+    fri: { isWorking: true, shifts: [{ start: 600, end: 1200, branchId: '' }] },
+    sat: { isWorking: true, shifts: [{ start: 660, end: 1140, branchId: '' }] },
+    sun: { isWorking: false, shifts: [] },
+  };
+
+  await db.doc('tenants/' + tenantId + '/masters/' + masterId).set({
+    name,
+    whatsappNumber,
+    type: data.type || 'employee',
+    photoUrl: data.photoUrl || '',
+    primaryBranchId: data.primaryBranchId || '',
+    workingBranchIds: [],
+    serviceIds: [],
+    color: data.color || '#4A90D9',
+    schedule: defaultSchedule,
+    isActive: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    _schemaVersion: 4,
+  });
+
+  return { success: true, masterId };
+});
+
+// ============ updateMaster ============
+
+export const updateMaster = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const masterId = data.masterId;
+  if (!masterId) throw new HttpsError('invalid-argument', 'masterId is required');
+
+  const allowedFields = [
+    'name', 'whatsappNumber', 'photoUrl', 'primaryBranchId',
+    'color', 'serviceIds', 'schedule',
+  ];
+  const updates: Record<string, unknown> = {};
+  for (const key of allowedFields) {
+    if (data[key] !== undefined) updates[key] = data[key];
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new HttpsError('invalid-argument', 'No valid fields to update');
+  }
+
+  await db.doc('tenants/' + tenantId + '/masters/' + masterId).update(updates);
+  return { success: true };
+});
+
+// ============ deactivateMaster ============
+
+export const deactivateMaster = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const masterId = data.masterId;
+  if (!masterId) throw new HttpsError('invalid-argument', 'masterId is required');
+
+  await db.doc('tenants/' + tenantId + '/masters/' + masterId).update({
     isActive: false,
   });
 

@@ -1,7 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function hasTenant(tenantId) {
       return request.auth != null && request.auth.token.tenantId == tenantId;
     }
@@ -24,6 +23,16 @@ service cloud.firestore {
       match /branches/{branchId} {
         allow read: if hasTenant(tenantId);
         allow write: if false;
+      }
+
+      match /masters/{masterId} {
+        allow read: if isOwnerOrAdmin(tenantId);
+        allow write: if false;
+
+        match /private/{doc} {
+          allow read: if isOwner(tenantId);
+          allow write: if false;
+        }
       }
 
       match /{document=**} {
