@@ -730,3 +730,49 @@ export const createAppointment = onCall(async (request) => {
 
   return { success: true, appointmentId: appointmentRef.id };
 });
+
+
+// ============ updateAppointmentStatus ============
+
+export const updateAppointmentStatus = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const appointmentId = data.appointmentId;
+  const newStatus = data.status;
+
+  if (!appointmentId) throw new HttpsError('invalid-argument', 'appointmentId is required');
+  const allowed = ['pending', 'confirmed', 'completed', 'cancelled', 'noshow'];
+  if (!allowed.includes(newStatus)) {
+    throw new HttpsError('invalid-argument', 'Invalid status');
+  }
+
+  const apptRef = db.doc('tenants/' + tenantId + '/appointments/' + appointmentId);
+  const apptSnap = await apptRef.get();
+  if (!apptSnap.exists) throw new HttpsError('not-found', 'Appointment not found');
+  const appt = apptSnap.data()!;
+  const oldStatus = appt.status;
+  if (oldStatus === newStatus) return { success: true };
+
+  await apptRef.update({
+    status: newStatus,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  // Release the ledger slot when an appointment is cancelled.
+  if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
+    const ledgerRef = db.doc(
+      'tenants/' + tenantId + '/ledger/' + appt.masterId + '_' + appt.date
+    );
+    const ledgerSnap = await ledgerRef.get();
+    if (ledgerSnap.exists) {
+      const slots = (ledgerSnap.data()!.slots || []).filter(
+        (s: { appointmentId?: string }) => s.appointmentId !== appointmentId
+      );
+      await ledgerRef.update({ slots });
+    }
+  }
+
+  return { success: true };
+});

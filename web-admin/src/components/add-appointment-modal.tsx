@@ -10,6 +10,8 @@ type Props = {
   onClose: () => void;
   onCreated: () => void;
   tenantId: string;
+  initialMasterId?: string;
+  initialDate?: string;
 };
 
 type Client = { id: string; name: string; phoneNormalized?: string; isBlocked?: boolean };
@@ -23,14 +25,14 @@ function minutesToTime(minutes: number): string {
   return String(hours).padStart(2, '0') + ':' + String(remainder).padStart(2, '0');
 }
 
-export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId }: Props) {
+export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId, initialMasterId, initialDate }: Props) {
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [masters, setMasters] = useState<Master[]>([]);
   const [clientId, setClientId] = useState('');
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-  const [masterId, setMasterId] = useState('');
-  const [date, setDate] = useState('');
+  const [masterId, setMasterId] = useState(initialMasterId || '');
+  const [date, setDate] = useState(initialDate || '');
   const [availableSlots, setAvailableSlots] = useState<Slot[]>([]);
   const [loadingLists, setLoadingLists] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -43,6 +45,12 @@ export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId }: Pr
       .reduce((sum, service) => sum + Number(service.durationMinutes || 0), 0),
     [services, selectedServiceIds],
   );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setMasterId(initialMasterId || '');
+    setDate(initialDate || '');
+  }, [isOpen, initialMasterId, initialDate]);
 
   useEffect(() => {
     if (!isOpen || !tenantId) return;

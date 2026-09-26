@@ -3,44 +3,29 @@
 import { useCallback, useEffect, useState } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { AddAppointmentModal } from '@/components/add-appointment-modal';
+import { AppointmentDetailModal } from '@/components/appointment-detail-modal';
+import { CalendarGrid, type Appointment, type Master } from '@/components/calendar-grid';
 import { getFirebaseDb } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 
-type Appointment = {
-  id: string;
-  date: string;
-  startMinutes: number;
-  endMinutes: number;
-  clientName: string;
-  masterName: string;
-  serviceNames: string[];
-  totalPriceKzt: number;
-  status: string;
-};
-
 function todayAsDateInput(): string {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return year + '-' + month + '-' + day;
-}
-
-function minutesToTime(minutes: number): string {
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return String(hours).padStart(2, '0') + ':' + String(remainder).padStart(2, '0');
+  return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 }
 
 export default function CalendarPage() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(todayAsDateInput);
+  const [masters, setMasters] = useState<Master[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [initialMasterId, setInitialMasterId] = useState<string | undefined>();
+  const [initialDate, setInitialDate] = useState<string | undefined>();
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
-  const loadAppointments = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!user?.tenantId || !selectedDate) {
       setLoading(false);
       return;
@@ -48,31 +33,43 @@ export default function CalendarPage() {
     setLoading(true);
     setError('');
     try {
-      const appointmentsQuery = query(
-        collection(getFirebaseDb(), 'tenants', user.tenantId, 'appointments'),
-        where('date', '==', selectedDate),
-      );
-      const snap = await getDocs(appointmentsQuery);
-      const rows = snap.docs.map((item) => ({
+      const db = getFirebaseDb();
+      const [masterSnap, appointmentSnap] = await Promise.all([
+        getDocs(collection(db, 'tenants', user.tenantId, 'masters')),
+        getDocs(query(
+          collection(db, 'tenants', user.tenantId, 'appointments'),
+          where('date', '==', selectedDate),
+        )),
+      ]);
+      setMasters(masterSnap.docs
+        .map((item) => ({ id: item.id, ...(item.data() as Omit<Master, 'id'>) }))
+        .filter((master) => master.isActive));
+      const rows = appointmentSnap.docs.map((item) => ({
         id: item.id,
         ...(item.data() as Omit<Appointment, 'id'>),
       }));
       rows.sort((a, b) => a.startMinutes - b.startMinutes);
       setAppointments(rows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить записи');
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить календарь');
     } finally {
       setLoading(false);
     }
   }, [user?.tenantId, selectedDate]);
 
-  useEffect(() => { void loadAppointments(); }, [loadAppointments]);
+  useEffect(() => { void loadData(); }, [loadData]);
+
+  const openCreateModal = (masterId?: string, date?: string) => {
+    setInitialMasterId(masterId);
+    setInitialDate(date);
+    setShowCreateModal(true);
+  };
 
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Календарь</h1>
-        <button type="button" onClick={() => setShowModal(true)}
+        <button type="button" onClick={() => openCreateModal()}
           className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
           + Новая запись
         </button>
@@ -85,42 +82,30 @@ export default function CalendarPage() {
       </label>
 
       {error && <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-
-      {loading ? <p>Загрузка записей...</p> : appointments.length === 0 ? (
-        <div className="rounded-lg bg-white p-8 text-center text-gray-500 shadow">
-          На этот день записей нет
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {appointments.map((appointment) => (
-            <article key={appointment.id} className="rounded-lg bg-white p-5 shadow">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    {minutesToTime(appointment.startMinutes)} - {minutesToTime(appointment.endMinutes)}
-                  </h2>
-                  <p className="mt-1 text-gray-800">{appointment.clientName}</p>
-                  <p className="text-sm text-gray-600">Мастер: {appointment.masterName}</p>
-                  <p className="mt-2 text-sm text-gray-600">{appointment.serviceNames?.join(', ') || '—'}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold">{Number(appointment.totalPriceKzt || 0).toLocaleString('ru-RU')} ₸</p>
-                  <p className="mt-1 text-sm text-gray-500">Статус: {appointment.status}</p>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
+      {loading ? <p>Загрузка календаря...</p> : (
+        <CalendarGrid
+          masters={masters}
+          appointments={appointments}
+          onAppointmentClick={setSelectedAppointment}
+          onEmptySlotClick={(masterId) => openCreateModal(masterId, selectedDate)}
+        />
       )}
 
       {user?.tenantId && (
         <AddAppointmentModal
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          onCreated={() => { void loadAppointments(); }}
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => { void loadData(); }}
           tenantId={user.tenantId}
+          initialMasterId={initialMasterId}
+          initialDate={initialDate}
         />
       )}
+      <AppointmentDetailModal
+        appointment={selectedAppointment}
+        onClose={() => setSelectedAppointment(null)}
+        onUpdated={() => { void loadData(); }}
+      />
     </div>
   );
 }
