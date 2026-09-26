@@ -13,7 +13,7 @@ service cloud.firestore {
         (request.auth.token.role == 'owner' || request.auth.token.role == 'admin');
     }
 
-    match /platform/{doc=**} {
+    match /slugRegistry/{slug} {
       allow read, write: if false;
     }
 

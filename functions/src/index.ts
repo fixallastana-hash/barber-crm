@@ -563,7 +563,7 @@ function validateWidgetSlug(slug: unknown): asserts slug is string {
 }
 
 async function getWidgetTenantId(slug: string): Promise<string> {
-  const slugSnap = await db.doc('platform/slugRegistry/' + slug).get();
+  const slugSnap = await db.doc('slugRegistry/' + slug).get();
   if (!slugSnap.exists) throw new HttpsError('not-found', 'Salon not found');
   const slugData = slugSnap.data()!;
   if (slugData.isDeleted === true) throw new HttpsError('not-found', 'Salon not found');
@@ -585,7 +585,7 @@ export const widgetGetSalon = onCall({ invoker: 'public' }, async (request) => {
   const slug = (request.data || {}).slug;
   validateWidgetSlug(slug);
 
-  const slugSnap = await db.doc('platform/slugRegistry/' + slug).get();
+  const slugSnap = await db.doc('slugRegistry/' + slug).get();
   if (!slugSnap.exists) return { status: 'not_found' };
   const slugData = slugSnap.data()!;
   if (slugData.isDeleted === true) return { status: 'gone' };
@@ -895,7 +895,7 @@ export const updateWidgetSlug = onCall(async (request) => {
   const oldSlug = (infoSnap.data()!.widgetSlug as string) || '';
   if (oldSlug === newSlug) return { success: true, slug: newSlug };
 
-  const newSlugRef = db.doc('platform/slugRegistry/' + newSlug);
+  const newSlugRef = db.doc('slugRegistry/' + newSlug);
   await db.runTransaction(async (tx) => {
     const existing = await tx.get(newSlugRef);
     if (existing.exists) throw new HttpsError('already-exists', 'slug taken');
@@ -906,7 +906,7 @@ export const updateWidgetSlug = onCall(async (request) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     if (oldSlug) {
-      tx.set(db.doc('platform/slugRegistry/' + oldSlug), {
+      tx.set(db.doc('slugRegistry/' + oldSlug), {
         tenantId,
         isAlias: true,
         redirectsTo: newSlug,
