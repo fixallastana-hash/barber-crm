@@ -1,1 +1,5 @@
-
+packages:
+  - 'functions'
+  - 'shared'
+  - 'web-admin'
+  - 'web-widget'
