@@ -13,6 +13,10 @@ service cloud.firestore {
         (request.auth.token.role == 'owner' || request.auth.token.role == 'admin');
     }
 
+    match /platform/{doc=**} {
+      allow read, write: if false;
+    }
+
     match /tenants/{tenantId} {
       allow read, write: if false;
 
