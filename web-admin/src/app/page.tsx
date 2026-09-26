@@ -1,14 +1,25 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
+
 export default function HomePage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+    if (user) {
+      router.push('/app');
+    } else {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">
-          Barber CRM Admin
-        </h1>
-        <p className="text-lg text-gray-600">
-          Спринт 0 — инфраструктура готова
-        </p>
-      </div>
+    <main className="min-h-screen flex items-center justify-center">
+      Загрузка...
     </main>
   );
 }

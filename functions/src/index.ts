@@ -393,7 +393,7 @@ export const deactivateService = onCall(async (request) => {
 
 
 
-// ============ helpers РґР»СЏ РєР»РёРµРЅС‚РѕРІ ============
+// ============ helpers Р Т‘Р В»РЎРЏ Р С”Р В»Р С‘Р ВµР Р…РЎвЂљР С•Р Р† ============
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -492,3 +492,49 @@ export const blockClient = onCall(async (request) => {
   return { success: true };
 });
 
+
+
+// ============ createAdmin ============
+
+export const createAdmin = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  if (role !== 'owner') {
+    throw new HttpsError('permission-denied', 'Only owner can create admins');
+  }
+
+  const data = request.data || {};
+  const name = data.name;
+  const email = data.email;
+  const password = data.password;
+  const phone = data.phone || '';
+
+  if (!name) throw new HttpsError('invalid-argument', 'name is required');
+  if (!email) throw new HttpsError('invalid-argument', 'email is required');
+  if (!password) throw new HttpsError('invalid-argument', 'password is required');
+
+  let userRecord;
+  try {
+    userRecord = await auth.createUser({ email, password });
+  } catch (err) {
+    const error = err as { code?: string; message?: string };
+    if (error.code === 'auth/email-already-exists') {
+      throw new HttpsError('already-exists', 'Email already registered');
+    }
+    throw new HttpsError('internal', error.message || 'Unknown error');
+  }
+
+  const uid = userRecord.uid;
+
+  await db.doc('tenants/' + tenantId + '/users/' + uid).set({
+    role: 'admin',
+    name,
+    phone,
+    email,
+    isActive: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await auth.setCustomUserClaims(uid, { tenantId, role: 'admin' });
+
+  return { success: true, uid };
+});
