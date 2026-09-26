@@ -1,0 +1,25 @@
+{
+  "hosting": [
+    {
+      "site": "barber-crm-admin",
+      "public": "web-admin/out",
+      "ignore": ["firebase.json", "/.*", "/node_modules/**"]
+    },
+    {
+      "site": "barber-crm-widget",
+      "public": "web-widget/out",
+      "ignore": ["firebase.json", "/.*", "/node_modules/**"]
+    }
+  ],
+  "functions": {
+    "source": "functions",
+    "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}
