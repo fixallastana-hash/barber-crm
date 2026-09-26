@@ -83,8 +83,56 @@ export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
   });
 
   await batch.commit();
-
   await auth.setCustomUserClaims(uid, { tenantId: tenantId, role: 'owner' });
 
   return { success: true, tenantId: tenantId, uid: uid };
+});
+
+export const updateSalonInfo = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Authentication required');
+  }
+
+  const tenantId = request.auth.token.tenantId as string | undefined;
+  const role = request.auth.token.role as string | undefined;
+
+  if (!tenantId) {
+    throw new HttpsError('permission-denied', 'No tenant assigned');
+  }
+  if (role !== 'owner' && role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Only owner or admin can update salon info');
+  }
+
+  const data = request.data || {};
+  const allowedFields = [
+    'name',
+    'city',
+    'phone',
+    'whatsappBusinessNumber',
+    'logoUrl',
+    'dgisUrl',
+    'cancellationWindowHours',
+    'reminderHours',
+    'noshowBlockThreshold',
+    'requireConfirmation',
+    'pendingConfirmationTimeoutMinutes',
+  ];
+
+  const updates: Record<string, unknown> = {};
+  for (const key of allowedFields) {
+    if (data[key] !== undefined) {
+      updates[key] = data[key];
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new HttpsError('invalid-argument', 'No valid fields to update');
+  }
+
+  updates['updatedAt'] = admin.firestore.FieldValue.serverTimestamp();
+
+  const infoPath = 'tenants/' + tenantId + '/config/info';
+  await db.doc(infoPath).update(updates);
+
+  return { success: true };
 });

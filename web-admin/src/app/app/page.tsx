@@ -1,36 +1,33 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
-export default function AppPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
-
-  if (loading) {
-    return <main className="min-h-screen flex items-center justify-center">Загрузка...</main>;
-  }
-
-  if (!user) return null;
+export default function DashboardPage() {
+  const { user } = useAuth();
 
   return (
-    <main className="min-h-screen p-8 bg-gray-50">
-      <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-4">Личный кабинет</h1>
-        <p className="text-gray-700">Email: {user.email}</p>
-        <p className="text-gray-700">Роль: {user.role}</p>
-        <p className="text-gray-700">Tenant ID: {user.tenantId}</p>
-        <p className="mt-6 text-sm text-gray-500">
-          Это заглушка. Полноценный дашборд будет в следующих спринтах.
-        </p>
+    <div>
+      <h1 className="text-2xl font-bold mb-2">Дашборд</h1>
+      <p className="text-gray-600 mb-6">
+        Добро пожаловать! Это ваш личный кабинет.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-6 rounded-lg shadow">
+          <p className="text-sm text-gray-500">Email</p>
+          <p className="text-lg font-medium mt-1">{user?.email}</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow">
+          <p className="text-sm text-gray-500">Роль</p>
+          <p className="text-lg font-medium mt-1">{user?.role}</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow">
+          <p className="text-sm text-gray-500">Tenant ID</p>
+          <p className="text-sm font-mono mt-1 break-all">{user?.tenantId}</p>
+        </div>
       </div>
-    </main>
+      <p className="mt-6 text-sm text-gray-500">
+        Полноценный дашборд с метриками появится в Спринте 13.
+      </p>
+    </div>
   );
 }
