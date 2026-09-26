@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "barber-crm-dev"
-  }
+  },
+  "targets": {
+    "barber-crm-dev": {
+      "hosting": {
+        "admin": [
+          "barber-crm-admin"
+        ],
+        "widget": [
+          "barber-crm-widget"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

@@ -10,8 +10,9 @@ import { useAuth } from '@/lib/auth-context';
 type Shift = { start: number; end: number; branchId: string };
 type DaySchedule = { isWorking: boolean; shifts: Shift[] };
 type Schedule = Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', DaySchedule>;
-type Master = { name: string; whatsappNumber: string; type: string; primaryBranchId: string; schedule?: Schedule };
+type Master = { name: string; whatsappNumber: string; type: string; primaryBranchId: string; serviceIds?: string[]; schedule?: Schedule };
 type Branch = { id: string; name: string; isActive: boolean };
+type Service = { id: string; name: string; priceKzt: number; isActive: boolean };
 
 const days: { key: keyof Schedule; label: string }[] = [
   { key: 'mon', label: 'Понедельник' }, { key: 'tue', label: 'Вторник' },
@@ -40,8 +41,13 @@ function ScheduleEditor() {
   const [master, setMaster] = useState<Master | null>(null);
   const [schedule, setSchedule] = useState<Schedule>(defaultSchedule);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingServices, setSavingServices] = useState(false);
+  const [servicesSaved, setServicesSaved] = useState(false);
+  const [servicesError, setServicesError] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -53,15 +59,17 @@ function ScheduleEditor() {
       setError('');
       try {
         const db = getFirebaseDb();
-        const [masterSnap, branchSnap] = await Promise.all([
+        const [masterSnap, branchSnap, serviceSnap] = await Promise.all([
           getDoc(doc(db, 'tenants', user.tenantId!, 'masters', masterId)),
           getDocs(collection(db, 'tenants', user.tenantId!, 'branches')),
+          getDocs(collection(db, 'tenants', user.tenantId!, 'services')),
         ]);
         if (cancelled) return;
         if (masterSnap.exists()) {
           const data = masterSnap.data() as Master;
           setMaster(data);
           setSchedule({ ...defaultSchedule, ...(data.schedule || {}) });
+          setSelectedServiceIds(data.serviceIds || []);
         } else {
           setMaster(null);
           setError('Мастер не найден');
@@ -69,6 +77,9 @@ function ScheduleEditor() {
         setBranches(branchSnap.docs.map((item) => ({
           id: item.id, ...(item.data() as Omit<Branch, 'id'>),
         })).filter((branch) => branch.isActive));
+        setServices(serviceSnap.docs.map((item) => ({
+          id: item.id, ...(item.data() as Omit<Service, 'id'>),
+        })).filter((service) => service.isActive));
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить данные мастера');
       } finally {
@@ -94,6 +105,23 @@ function ScheduleEditor() {
     } finally { setSaving(false); }
   };
 
+  const handleSaveServices = async () => {
+    if (!masterId) return;
+    setSavingServices(true);
+    setServicesError('');
+    setServicesSaved(false);
+    try {
+      const updateMaster = httpsCallable(getFirebaseFunctions(), 'updateMaster');
+      await updateMaster({ masterId, serviceIds: selectedServiceIds });
+      setServicesSaved(true);
+      window.setTimeout(() => setServicesSaved(false), 2000);
+    } catch (err) {
+      setServicesError(err instanceof Error ? err.message : 'Не удалось сохранить услуги');
+    } finally {
+      setSavingServices(false);
+    }
+  };
+
   if (loading) return <p>Загрузка...</p>;
   if (!masterId) return <p>В URL не указан masterId.</p>;
   if (!master) return <p>{error || 'Мастер не найден'}</p>;
@@ -109,6 +137,41 @@ function ScheduleEditor() {
         <p><span className="text-sm text-gray-500">Телефон:</span> {master.whatsappNumber}</p>
         <p><span className="text-sm text-gray-500">Тип:</span> {master.type === 'renter' ? 'Арендатор' : 'Сотрудник'}</p>
         <p><span className="text-sm text-gray-500">Основной филиал:</span> {primaryBranch?.name || master.primaryBranchId || '—'}</p>
+      </section>
+      <section className="mb-6 rounded-lg bg-white p-6 shadow">
+        <h2 className="mb-4 text-xl font-semibold">Услуги мастера</h2>
+        {servicesError && <p role="alert" className="mb-3 rounded bg-red-50 p-3 text-sm text-red-700">{servicesError}</p>}
+        {services.length === 0 ? (
+          <p className="mb-4 text-sm text-gray-500">Нет активных услуг для назначения.</p>
+        ) : (
+          <div className="mb-4 divide-y">
+            {services.map((service) => (
+              <label key={service.id} className="flex cursor-pointer items-center justify-between gap-4 py-3">
+                <span className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedServiceIds.includes(service.id)}
+                    onChange={() => {
+                      setSelectedServiceIds((current) => current.includes(service.id)
+                        ? current.filter((id) => id !== service.id)
+                        : [...current, service.id]);
+                      setServicesSaved(false);
+                    }}
+                  />
+                  <span className="text-sm text-gray-900">{service.name}</span>
+                </span>
+                <span className="shrink-0 text-sm text-gray-600">{service.priceKzt.toLocaleString('ru-RU')} ₸</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => void handleSaveServices()} disabled={savingServices}
+            className="rounded bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 disabled:opacity-50">
+            {savingServices ? 'Сохранение...' : 'Сохранить услуги'}
+          </button>
+          {servicesSaved && <span role="status" className="text-sm text-green-700">Сохранено</span>}
+        </div>
       </section>
       <section className="space-y-4">
         {days.map(({ key, label }) => {

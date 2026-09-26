@@ -1,14 +1,16 @@
 {
   "hosting": [
     {
-      "site": "barber-crm-admin",
+      "target": "admin",
       "public": "web-admin/out",
-      "ignore": ["firebase.json", "/.*", "/node_modules/**"]
+      "ignore": ["firebase.json", "/.*", "/node_modules/**"],
+      "rewrites": [{ "source": "**", "destination": "/index.html" }]
     },
     {
-      "site": "barber-crm-widget",
+      "target": "widget",
       "public": "web-widget/out",
-      "ignore": ["firebase.json", "/.*", "/node_modules/**"]
+      "ignore": ["firebase.json", "/.*", "/node_modules/**"],
+      "rewrites": [{ "source": "**", "destination": "/index.html" }]
     }
   ],
   "functions": {
