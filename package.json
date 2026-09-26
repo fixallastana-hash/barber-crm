@@ -1,1 +1,24 @@
-
+{
+  "name": "barber-crm",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev:admin": "pnpm --filter web-admin dev",
+    "dev:widget": "pnpm --filter web-widget dev",
+    "build": "pnpm -r build",
+    "build:admin": "pnpm --filter web-admin build",
+    "build:widget": "pnpm --filter web-widget build",
+    "build:functions": "pnpm --filter functions build",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "deploy:admin": "firebase deploy --only hosting:admin",
+    "deploy:widget": "firebase deploy --only hosting:widget",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy": "firebase deploy"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}
