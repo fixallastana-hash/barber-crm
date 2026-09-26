@@ -258,6 +258,19 @@ export const updateMaster = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'No valid fields to update');
   }
 
+  if (updates.schedule) {
+    const schedule = updates.schedule as Record<string, { isWorking: boolean; shifts: Array<{ branchId?: string }> }>;
+    const branchSet = new Set<string>();
+    for (const day of Object.values(schedule)) {
+      if (day.isWorking && day.shifts) {
+        for (const shift of day.shifts) {
+          if (shift.branchId) branchSet.add(shift.branchId);
+        }
+      }
+    }
+    updates.workingBranchIds = Array.from(branchSet);
+  }
+
   await db.doc('tenants/' + tenantId + '/masters/' + masterId).update(updates);
   return { success: true };
 });
@@ -380,7 +393,7 @@ export const deactivateService = onCall(async (request) => {
 
 
 
-// ============ helpers для клиентов ============
+// ============ helpers РґР»СЏ РєР»РёРµРЅС‚РѕРІ ============
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -478,3 +491,4 @@ export const blockClient = onCall(async (request) => {
 
   return { success: true };
 });
+

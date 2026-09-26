@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useCallback, useEffect, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -49,7 +51,7 @@ export default function MastersPage() {
         .map((item) => ({ id: item.id, ...(item.data() as Omit<Branch, 'id'>) }))
         .filter((branch) => branch.isActive));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить данные');
+      setError(err instanceof Error ? err.message : 'Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р В·Р В°Р С–РЎР‚РЎС“Р В·Р С‘РЎвЂљРЎРЉ Р Т‘Р В°Р Р…Р Р…РЎвЂ№Р Вµ');
     } finally {
       setLoading(false);
     }
@@ -71,33 +73,33 @@ export default function MastersPage() {
       setShowForm(false);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось создать мастера');
+      setError(err instanceof Error ? err.message : 'Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ РЎРѓР С•Р В·Р Т‘Р В°РЎвЂљРЎРЉ Р СР В°РЎРѓРЎвЂљР ВµРЎР‚Р В°');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDeactivate = async (masterId: string) => {
-    if (!window.confirm('Деактивировать мастера?')) return;
+    if (!window.confirm('Р вЂќР ВµР В°Р С”РЎвЂљР С‘Р Р†Р С‘РЎР‚Р С•Р Р†Р В°РЎвЂљРЎРЉ Р СР В°РЎРѓРЎвЂљР ВµРЎР‚Р В°?')) return;
     setError('');
     try {
       const deactivateMaster = httpsCallable(getFirebaseFunctions(), 'deactivateMaster');
       await deactivateMaster({ masterId });
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось деактивировать мастера');
+      setError(err instanceof Error ? err.message : 'Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р Т‘Р ВµР В°Р С”РЎвЂљР С‘Р Р†Р С‘РЎР‚Р С•Р Р†Р В°РЎвЂљРЎРЉ Р СР В°РЎРѓРЎвЂљР ВµРЎР‚Р В°');
     }
   };
 
-  if (loading) return <p>Загрузка...</p>;
+  if (loading) return <p>Р вЂ”Р В°Р С–РЎР‚РЎС“Р В·Р С”Р В°...</p>;
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Мастера</h1>
+        <h1 className="text-2xl font-bold">Р СљР В°РЎРѓРЎвЂљР ВµРЎР‚Р В°</h1>
         <button type="button" onClick={() => setShowForm((value) => !value)}
           className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-          {showForm ? 'Отмена' : '+ Добавить мастера'}
+          {showForm ? 'Р С›РЎвЂљР СР ВµР Р…Р В°' : '+ Р вЂќР С•Р В±Р В°Р Р†Р С‘РЎвЂљРЎРЉ Р СР В°РЎРѓРЎвЂљР ВµРЎР‚Р В°'}
         </button>
       </div>
 
@@ -106,67 +108,67 @@ export default function MastersPage() {
       {showForm && (
         <form onSubmit={handleCreate} className="mb-6 space-y-4 rounded-lg bg-white p-6 shadow">
           <label className="block">
-            <span className="text-sm text-gray-700">Имя *</span>
+            <span className="text-sm text-gray-700">Р ВР СРЎРЏ *</span>
             <input type="text" value={name} onChange={(event) => setName(event.target.value)}
               required className="mt-1 w-full rounded border px-3 py-2" />
           </label>
           <label className="block">
-            <span className="text-sm text-gray-700">WhatsApp номер *</span>
+            <span className="text-sm text-gray-700">WhatsApp Р Р…Р С•Р СР ВµРЎР‚ *</span>
             <input type="tel" value={whatsappNumber} onChange={(event) => setWhatsappNumber(event.target.value)}
               required className="mt-1 w-full rounded border px-3 py-2" />
           </label>
           <label className="block">
-            <span className="text-sm text-gray-700">Основной филиал</span>
+            <span className="text-sm text-gray-700">Р С›РЎРѓР Р…Р С•Р Р†Р Р…Р С•Р в„– РЎвЂћР С‘Р В»Р С‘Р В°Р В»</span>
             <select value={primaryBranchId} onChange={(event) => setPrimaryBranchId(event.target.value)}
               className="mt-1 w-full rounded border px-3 py-2">
-              <option value="">Не выбран</option>
+              <option value="">Р СњР Вµ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…</option>
               {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
             </select>
           </label>
           <fieldset>
-            <legend className="mb-2 text-sm text-gray-700">Тип мастера</legend>
+            <legend className="mb-2 text-sm text-gray-700">Р СћР С‘Р С— Р СР В°РЎРѓРЎвЂљР ВµРЎР‚Р В°</legend>
             <div className="flex gap-6">
               <label className="flex items-center gap-2">
                 <input type="radio" name="masterType" value="employee" checked={type === 'employee'}
                   onChange={() => setType('employee')} />
-                Сотрудник
+                Р РЋР С•РЎвЂљРЎР‚РЎС“Р Т‘Р Р…Р С‘Р С”
               </label>
               <label className="flex items-center gap-2">
                 <input type="radio" name="masterType" value="renter" checked={type === 'renter'}
                   onChange={() => setType('renter')} />
-                Арендатор
+                Р С’РЎР‚Р ВµР Р…Р Т‘Р В°РЎвЂљР С•РЎР‚
               </label>
             </div>
           </fieldset>
           <button type="submit" disabled={saving}
             className="w-full rounded bg-blue-600 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
-            {saving ? 'Создание...' : 'Создать мастера'}
+            {saving ? 'Р РЋР С•Р В·Р Т‘Р В°Р Р…Р С‘Р Вµ...' : 'Р РЋР С•Р В·Р Т‘Р В°РЎвЂљРЎРЉ Р СР В°РЎРѓРЎвЂљР ВµРЎР‚Р В°'}
           </button>
         </form>
       )}
 
       {masters.length === 0 ? (
         <div className="rounded-lg bg-white p-8 text-center text-gray-500 shadow">
-          Пока нет мастеров. Добавьте первого.
+          Р СџР С•Р С”Р В° Р Р…Р ВµРЎвЂљ Р СР В°РЎРѓРЎвЂљР ВµРЎР‚Р С•Р Р†. Р вЂќР С•Р В±Р В°Р Р†РЎРЉРЎвЂљР Вµ Р С—Р ВµРЎР‚Р Р†Р С•Р С–Р С•.
         </div>
       ) : (
         <div className="divide-y rounded-lg bg-white shadow">
           {masters.map((master) => {
-            const branchName = branches.find((branch) => branch.id === master.primaryBranchId)?.name || '—';
+            const branchName = branches.find((branch) => branch.id === master.primaryBranchId)?.name || 'РІР‚вЂќ';
             return (
               <div key={master.id} className="flex items-center justify-between gap-4 p-4">
                 <div>
                   <p className="font-medium">
-                    {master.name} {!master.isActive && <span className="text-xs text-red-500">(неактивен)</span>}
+                    <Link href={'/app/masters/schedule?masterId=' + master.id} className="font-medium text-blue-600 hover:underline">{master.name}</Link> {!master.isActive && <span className="text-xs text-red-500">(Р Р…Р ВµР В°Р С”РЎвЂљР С‘Р Р†Р ВµР Р…)</span>}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {master.whatsappNumber} · {branchName} · {master.type === 'renter' ? 'Арендатор' : 'Сотрудник'}
+                    {master.whatsappNumber} Р’В· {branchName} Р’В· {master.type === 'renter' ? 'Р С’РЎР‚Р ВµР Р…Р Т‘Р В°РЎвЂљР С•РЎР‚' : 'Р РЋР С•РЎвЂљРЎР‚РЎС“Р Т‘Р Р…Р С‘Р С”'}
                   </p>
                 </div>
                 {master.isActive && (
                   <button type="button" onClick={() => void handleDeactivate(master.id)}
                     className="text-sm text-red-600 hover:text-red-700">
-                    Деактивировать
+                    Р вЂќР ВµР В°Р С”РЎвЂљР С‘Р Р†Р С‘РЎР‚Р С•Р Р†Р В°РЎвЂљРЎРЉ
                   </button>
                 )}
               </div>
@@ -177,3 +179,5 @@ export default function MastersPage() {
     </div>
   );
 }
+
+
