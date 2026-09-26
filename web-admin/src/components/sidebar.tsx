@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 
 const navItems = [
   { href: '/app', label: 'Дашборд' },
+  { href: '/app/calendar', label: 'Календарь' },
   { href: '/app/settings', label: 'Салон' },
   { href: '/app/branches', label: 'Филиалы' },
   { href: '/app/masters', label: 'Мастера' },
