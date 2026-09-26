@@ -98,7 +98,7 @@ export default function MastersPage() {
       const generateMasterToken = httpsCallable(getFirebaseFunctions(), 'generateMasterToken');
       const result = await generateMasterToken({ masterId });
       const data = result.data as { token: string };
-      const url = 'http://localhost:3001/master?token=' + data.token;
+      const url = 'https://barber-crm-widget.web.app/master?token=' + data.token;
       await navigator.clipboard.writeText(url);
       window.alert('Ссылка скопирована:\n\n' + url + '\n\nОтправьте её мастеру. Он сохранит на главный экран.');
     } catch (err) {
