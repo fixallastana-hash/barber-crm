@@ -759,10 +759,20 @@ export const updateAppointmentStatus = onCall(async (request) => {
   const oldStatus = appt.status;
   if (oldStatus === newStatus) return { success: true };
 
-  await apptRef.update({
+  const updates: Record<string, unknown> = {
     status: newStatus,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  };
+
+  if (newStatus === 'completed') {
+    if (!appt.reviewToken) {
+      const crypto = await import('crypto');
+      updates.reviewToken = crypto.randomBytes(16).toString('hex');
+    }
+    updates.completedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  await apptRef.update(updates);
 
   // Release the ledger slot when an appointment is cancelled.
   if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
@@ -1066,7 +1076,137 @@ export const getMasterSchedule = onCall(
     return {
       success: true,
       masterName: master.name,
+      masterPhotoUrl: master.photoUrl || '',
+      masterRating: master.rating || 0,
+      masterRatingCount: master.ratingCount || 0,
       appointments,
     };
+  }
+);
+
+// ============ submitReview (public) ============
+
+export const submitReview = onCall(
+  { invoker: 'public' },
+  async (request) => {
+    const data = request.data || {};
+    const appointmentId = data.appointmentId;
+    const rating = Number(data.rating);
+    const token = data.token;
+
+    if (!appointmentId) throw new HttpsError('invalid-argument', 'appointmentId required');
+    if (!token || typeof token !== 'string') throw new HttpsError('invalid-argument', 'token required');
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      throw new HttpsError('invalid-argument', 'rating must be 1-5');
+    }
+
+    const apptSnap = await db
+      .collectionGroup('appointments')
+      .where('reviewToken', '==', token)
+      .limit(1)
+      .get();
+
+    if (apptSnap.empty) throw new HttpsError('not-found', 'Invalid token');
+
+    const apptDoc = apptSnap.docs[0];
+    const appt = apptDoc.data();
+
+    if (apptDoc.id !== appointmentId) throw new HttpsError('invalid-argument', 'mismatch');
+    if (appt.status !== 'completed') throw new HttpsError('failed-precondition', 'not completed');
+    if (appt.reviewSubmitted === true) throw new HttpsError('already-exists', 'already reviewed');
+
+    const completedAt = appt.completedAt;
+    if (completedAt && completedAt.toDate) {
+      const daysSince = (Date.now() - completedAt.toDate().getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSince > 30) throw new HttpsError('failed-precondition', 'Review window expired');
+    }
+
+    const pathParts = apptDoc.ref.path.split('/');
+    const tenantId = pathParts[1];
+    const masterId = appt.masterId as string;
+
+    const reviewRef = db.collection('tenants/' + tenantId + '/reviews').doc();
+    await reviewRef.set({
+      appointmentId: apptDoc.id,
+      masterId,
+      clientId: appt.clientId,
+      rating,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await apptDoc.ref.update({ reviewSubmitted: true, reviewRating: rating });
+
+    const reviewsSnap = await db
+      .collection('tenants/' + tenantId + '/reviews')
+      .where('masterId', '==', masterId)
+      .get();
+
+    let sum = 0;
+    let count = 0;
+    reviewsSnap.forEach((review) => {
+      sum += (review.data().rating as number) || 0;
+      count += 1;
+    });
+    const avg = count > 0 ? sum / count : 0;
+
+    await db.doc('tenants/' + tenantId + '/masters/' + masterId).update({
+      rating: Math.round(avg * 10) / 10,
+      ratingCount: count,
+    });
+
+    return { success: true, rating, avg: Math.round(avg * 10) / 10, count };
+  }
+);
+
+// ============ uploadMasterPhoto ============
+
+export const uploadMasterPhoto = onCall(
+  { invoker: 'public', memory: '512MiB' },
+  async (request) => {
+    const data = request.data || {};
+    const token = data.token;
+    const photoBase64 = data.photoBase64;
+
+    if (!token || typeof token !== 'string') {
+      throw new HttpsError('invalid-argument', 'token required');
+    }
+    if (!photoBase64 || typeof photoBase64 !== 'string') {
+      throw new HttpsError('invalid-argument', 'photoBase64 required');
+    }
+
+    const sizeBytes = (photoBase64.length * 3) / 4;
+    if (sizeBytes > 2 * 1024 * 1024) {
+      throw new HttpsError('invalid-argument', 'Photo too large (max 2MB)');
+    }
+
+    const mastersSnap = await db
+      .collectionGroup('masters')
+      .where('accessToken', '==', token)
+      .limit(1)
+      .get();
+
+    if (mastersSnap.empty) throw new HttpsError('not-found', 'Invalid token');
+
+    const masterDoc = mastersSnap.docs[0];
+    const pathParts = masterDoc.ref.path.split('/');
+    const tenantId = pathParts[1];
+    const masterId = masterDoc.id;
+
+    const bucket = admin.storage().bucket();
+    const filePath = 'master-photos/' + tenantId + '/' + masterId + '.jpg';
+    const file = bucket.file(filePath);
+
+    const buffer = Buffer.from(photoBase64, 'base64');
+    await file.save(buffer, {
+      contentType: 'image/jpeg',
+      metadata: { cacheControl: 'public, max-age=31536000' },
+    });
+    await file.makePublic();
+
+    const photoUrl = 'https://storage.googleapis.com/' + bucket.name + '/' + filePath;
+
+    await masterDoc.ref.update({ photoUrl });
+
+    return { success: true, photoUrl };
   }
 );

@@ -65,6 +65,11 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /reviews/{reviewId} {
+        allow read: if isOwnerOrAdmin(tenantId);
+        allow write: if false;
+      }
+
       match /appointments/{appointmentId} {
         allow read: if isOwnerOrAdmin(tenantId);
         allow write: if false;

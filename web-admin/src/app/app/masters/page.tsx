@@ -15,6 +15,9 @@ type Master = {
   primaryBranchId: string;
   type: string;
   isActive: boolean;
+  photoUrl?: string;
+  rating?: number;
+  ratingCount?: number;
 };
 
 export default function MastersPage() {
@@ -169,17 +172,31 @@ export default function MastersPage() {
             const branchName = branches.find((branch) => branch.id === master.primaryBranchId)?.name || '—';
             return (
               <div key={master.id} className="flex items-center justify-between gap-4 p-4">
-                <div>
-                  <p>
+                <div className="flex min-w-0 items-center gap-3">
+                  {master.photoUrl ? (
+                    <img src={master.photoUrl} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-200 text-lg font-medium text-gray-600">
+                      {(master.name || '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p>
                     <Link href={'/app/masters/schedule?masterId=' + master.id}
                       className="font-medium text-blue-600 hover:underline">
                       {master.name}
                     </Link>{' '}
                     {!master.isActive && <span className="text-xs text-red-500">(неактивен)</span>}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {master.whatsappNumber} · {branchName} · {master.type === 'renter' ? 'Арендатор' : 'Сотрудник'}
-                  </p>
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {master.ratingCount && master.ratingCount > 0
+                        ? '⭐ ' + (master.rating ?? 0) + ' (' + master.ratingCount + ' отзывов)'
+                        : <span className="text-gray-400">Нет отзывов</span>}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {master.whatsappNumber} · {branchName} · {master.type === 'renter' ? 'Арендатор' : 'Сотрудник'}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center">
                   {master.isActive && (
