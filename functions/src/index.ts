@@ -1,6 +1,9 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onTaskDispatched } from 'firebase-functions/v2/tasks';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { getFunctions } from 'firebase-admin/functions';
 import * as admin from 'firebase-admin';
 
 admin.initializeApp();
@@ -849,5 +852,119 @@ export const autoNoshow = onSchedule(
     }
 
     console.log('autoNoshow: processed ' + totalProcessed + ' appointments');
+  }
+);
+
+// ============ sendNotificationTask (worker) ============
+
+export const sendNotificationTask = onTaskDispatched(
+  {
+    retryConfig: {
+      maxAttempts: 3,
+      minBackoffSeconds: 60,
+      maxBackoffSeconds: 600,
+    },
+    rateLimits: {
+      maxConcurrentDispatches: 5,
+    },
+  },
+  async (req) => {
+    const payload = req.data || {};
+    const tenantId = payload.tenantId as string;
+    const appointmentId = payload.appointmentId as string;
+    const event = payload.event as string;
+
+    if (!tenantId || !appointmentId || !event) {
+      console.error('sendNotificationTask: missing payload');
+      return;
+    }
+
+    const apptSnap = await db
+      .doc('tenants/' + tenantId + '/appointments/' + appointmentId)
+      .get();
+    if (!apptSnap.exists) {
+      console.log('sendNotificationTask: appointment not found, skip');
+      return;
+    }
+    const appt = apptSnap.data()!;
+
+    const existingSnap = await db
+      .collection('tenants/' + tenantId + '/notifications')
+      .where('appointmentId', '==', appointmentId)
+      .where('event', '==', event)
+      .limit(1)
+      .get();
+    if (!existingSnap.empty) {
+      console.log('sendNotificationTask: already sent, skip');
+      return;
+    }
+
+    if (event === 'confirmation' && appt.status !== 'confirmed') {
+      console.log('sendNotificationTask: appointment not confirmed, skip');
+      return;
+    }
+
+    const masterSnap = await db
+      .doc('tenants/' + tenantId + '/masters/' + appt.masterId)
+      .get();
+    if (!masterSnap.exists) {
+      console.log('sendNotificationTask: master not found');
+      return;
+    }
+    const master = masterSnap.data()!;
+    const waNumber = master.whatsappNumber as string;
+
+    const notifRef = db.collection('tenants/' + tenantId + '/notifications').doc();
+    const expireAt = new Date();
+    expireAt.setMonth(expireAt.getMonth() + 6);
+
+    await notifRef.set({
+      appointmentId,
+      recipientType: 'master',
+      recipientPhone: waNumber,
+      event,
+      channel: 'whatsapp',
+      status: 'pending',
+      attemptsCount: 0,
+      processedForBilling: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expireAt,
+    });
+
+    console.log(
+      'MOCK WhatsApp to ' + waNumber + ' (event=' + event + ', appt=' + appointmentId + ')'
+    );
+
+    await notifRef.update({
+      status: 'sent',
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      attemptsCount: 1,
+    });
+  }
+);
+
+// ============ onAppointmentCreated trigger ============
+
+export const onAppointmentCreated = onDocumentCreated(
+  {
+    document: 'tenants/{tenantId}/appointments/{appointmentId}',
+    region: 'asia-east1',
+  },
+  async (event) => {
+    const tenantId = event.params.tenantId;
+    const appointmentId = event.params.appointmentId;
+    const appt = event.data?.data();
+    if (!appt) return;
+    if (appt.status !== 'confirmed' && appt.status !== 'pending') return;
+
+    const queue = getFunctions().taskQueue('sendNotificationTask');
+    await queue.enqueue(
+      { tenantId, appointmentId, event: 'confirmation' },
+      {
+        scheduleDelaySeconds: 30,
+        dispatchDeadlineSeconds: 60 * 5,
+      }
+    );
+    console.log('Enqueued: ' + appointmentId);
   }
 );
