@@ -17,8 +17,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        Загрузка...
+      <main className="flex min-h-screen items-center justify-center bg-[#f7f6f3]">
+        <div className="text-sm text-gray-400">Загрузка...</div>
       </main>
     );
   }
@@ -26,9 +26,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 p-8">{children}</main>
+    <div className="min-h-screen bg-[#f7f6f3]">
+      <div className="flex min-h-screen">
+        <Sidebar />
+
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto w-full max-w-[1440px]">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
