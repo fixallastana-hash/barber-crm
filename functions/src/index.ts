@@ -419,6 +419,69 @@ export const deactivateMaster = onCall(async (request) => {
   return { success: true };
 });
 
+// ============ updateCategory ============
+
+export const updateCategory = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const categoryId = data.categoryId;
+  const name = data.name;
+
+  if (!categoryId) throw new HttpsError('invalid-argument', 'categoryId is required');
+  if (!name) throw new HttpsError('invalid-argument', 'name is required');
+
+  await db.doc('tenants/' + tenantId + '/categories/' + categoryId).update({
+    name,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  const servicesSnap = await db
+    .collection('tenants/' + tenantId + '/services')
+    .where('categoryId', '==', categoryId)
+    .get();
+  if (!servicesSnap.empty) {
+    const batch = db.batch();
+    servicesSnap.forEach((doc) => {
+      batch.update(doc.ref, { categoryName: name });
+    });
+    await batch.commit();
+  }
+
+  return { success: true };
+});
+
+// ============ deactivateCategory ============
+
+export const deactivateCategory = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const categoryId = data.categoryId;
+  if (!categoryId) throw new HttpsError('invalid-argument', 'categoryId is required');
+
+  const servicesSnap = await db
+    .collection('tenants/' + tenantId + '/services')
+    .where('categoryId', '==', categoryId)
+    .where('isActive', '==', true)
+    .get();
+
+  if (!servicesSnap.empty) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Сначала деактивируйте услуги в этой категории',
+    );
+  }
+
+  await db.doc('tenants/' + tenantId + '/categories/' + categoryId).update({
+    isActive: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { success: true };
+});
 
 // ============ createCategory ============
 
@@ -518,9 +581,7 @@ export const deactivateService = onCall(async (request) => {
   return { success: true };
 });
 
-
-
-// ============ helpers Р Т‘Р В»РЎРЏ Р С”Р В»Р С‘Р ВµР Р…РЎвЂљР С•Р Р† ============
+// ============ helpers для клиентов ============
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -618,8 +679,6 @@ export const blockClient = onCall(async (request) => {
 
   return { success: true };
 });
-
-
 
 // ============ createAdmin ============
 
@@ -1124,7 +1183,6 @@ export const createAppointment = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'startMinutes is required');
   }
 
-  // 1. Read services, client, master
   const serviceSnaps = await Promise.all(
     serviceIds.map((id) => db.doc('tenants/' + tenantId + '/services/' + id).get())
   );
@@ -1150,7 +1208,6 @@ export const createAppointment = onCall(async (request) => {
   const master = masterSnap.data()!;
   if (!master.isActive) throw new HttpsError('failed-precondition', 'Master is not active');
 
-  // 2. Resolve branch from the matching shift
   const weekday = dayOfWeekKey(date);
   const daySchedule = master.schedule?.[weekday];
   if (!daySchedule || !daySchedule.isWorking) {
@@ -1165,7 +1222,6 @@ export const createAppointment = onCall(async (request) => {
   }
   const branchId = shift.branchId || '';
 
-  // 3. Transaction: read ledger before writes
   const ledgerRef = db.doc('tenants/' + tenantId + '/ledger/' + masterId + '_' + date);
   const appointmentRef = db.collection('tenants/' + tenantId + '/appointments').doc();
 
@@ -1223,7 +1279,6 @@ export const createAppointment = onCall(async (request) => {
   return { success: true, appointmentId: appointmentRef.id };
 });
 
-
 // ============ updateAppointmentStatus ============
 
 export const updateAppointmentStatus = onCall(async (request) => {
@@ -1262,7 +1317,6 @@ export const updateAppointmentStatus = onCall(async (request) => {
 
   await apptRef.update(updates);
 
-  // Release the ledger slot when an appointment is cancelled.
   if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
     const ledgerRef = db.doc(
       'tenants/' + tenantId + '/ledger/' + appt.masterId + '_' + appt.date
