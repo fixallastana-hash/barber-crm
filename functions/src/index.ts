@@ -419,6 +419,65 @@ export const deactivateMaster = onCall(async (request) => {
   return { success: true };
 });
 
+// ============ deleteService ============
+
+export const deleteService = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const serviceId = data.serviceId;
+  if (!serviceId) throw new HttpsError('invalid-argument', 'serviceId is required');
+
+  const serviceRef = db.doc('tenants/' + tenantId + '/services/' + serviceId);
+  const serviceSnap = await serviceRef.get();
+  if (!serviceSnap.exists) throw new HttpsError('not-found', 'Service not found');
+
+  const mastersSnap = await db
+    .collection('tenants/' + tenantId + '/masters')
+    .where('serviceIds', 'array-contains', serviceId)
+    .get();
+
+  const batch = db.batch();
+  mastersSnap.forEach((m) => {
+    batch.update(m.ref, {
+      serviceIds: admin.firestore.FieldValue.arrayRemove(serviceId),
+    });
+  });
+  batch.delete(serviceRef);
+  await batch.commit();
+
+  return { success: true };
+});
+
+// ============ deleteCategory ============
+
+export const deleteCategory = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const categoryId = data.categoryId;
+  if (!categoryId) throw new HttpsError('invalid-argument', 'categoryId is required');
+
+  const servicesSnap = await db
+    .collection('tenants/' + tenantId + '/services')
+    .where('categoryId', '==', categoryId)
+    .limit(1)
+    .get();
+
+  if (!servicesSnap.empty) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Сначала удалите все услуги в этой категории',
+    );
+  }
+
+  await db.doc('tenants/' + tenantId + '/categories/' + categoryId).delete();
+
+  return { success: true };
+});
+
 // ============ updateCategory ============
 
 export const updateCategory = onCall(async (request) => {
