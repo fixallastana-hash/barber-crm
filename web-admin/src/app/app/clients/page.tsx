@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { useEffect, useMemo, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -27,26 +27,27 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const loadClients = useCallback(async () => {
+  useEffect(() => {
     if (!user?.tenantId) {
       setLoading(false);
       return;
     }
-    setLoading(true);
-    try {
-      const snap = await getDocs(collection(getFirebaseDb(), 'tenants', user.tenantId, 'clients'));
-      setClients(snap.docs.map((item) => ({
-        id: item.id,
-        ...(item.data() as Omit<Client, 'id'>),
-      })));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить клиентов');
-    } finally {
-      setLoading(false);
-    }
+    const unsub = onSnapshot(
+      collection(getFirebaseDb(), 'tenants', user.tenantId, 'clients'),
+      (snap) => {
+        setClients(snap.docs.map((item) => ({
+          id: item.id,
+          ...(item.data() as Omit<Client, 'id'>),
+        })));
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+    return () => unsub();
   }, [user?.tenantId]);
-
-  useEffect(() => { void loadClients(); }, [loadClients]);
 
   const filteredClients = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase('ru');
@@ -67,7 +68,6 @@ export default function ClientsPage() {
       setName('');
       setPhone('');
       setShowForm(false);
-      await loadClients();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать клиента');
     } finally {
@@ -80,7 +80,6 @@ export default function ClientsPage() {
     try {
       const blockClient = httpsCallable(getFirebaseFunctions(), 'blockClient');
       await blockClient({ clientId: client.id, blocked: !client.isBlocked });
-      await loadClients();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось изменить статус клиента');
     }
