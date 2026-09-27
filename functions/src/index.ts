@@ -327,23 +327,32 @@ export const updateMasterCompensation = onCall(async (request) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
   } else {
+    } else {
     const rentType = data.rentType;
 
     if (rentType !== 'fixed' && rentType !== 'percentage') {
       throw new HttpsError('invalid-argument', 'rentType must be fixed or percentage');
     }
 
-    compensation = {
-      type: 'renter',
-      rentType,
-      fixedAmountKzt: numberValue(data.fixedAmountKzt, 'fixedAmountKzt'),
-      percentageOfRevenue: numberValue(
-        data.percentageOfRevenue,
-        'percentageOfRevenue',
-        100,
-      ),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
+    if (rentType === 'fixed') {
+      compensation = {
+        type: 'renter',
+        rentType: 'fixed',
+        fixedAmountKzt: numberValue(data.fixedAmountKzt, 'fixedAmountKzt'),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+    } else {
+      compensation = {
+        type: 'renter',
+        rentType: 'percentage',
+        percentageOfRevenue: numberValue(
+          data.percentageOfRevenue,
+          'percentageOfRevenue',
+          100,
+        ),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+    }
   }
 
   await masterRef.collection('private').doc('compensation').set(compensation, {
