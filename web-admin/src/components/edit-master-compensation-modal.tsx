@@ -24,6 +24,20 @@ type Props = {
   onClose: () => void;
 };
 
+function toFieldValue(value: number | undefined): string {
+  if (value === undefined || value === null) return '';
+  if (!Number.isFinite(value)) return '';
+  if (value === 0) return '';
+  return String(value);
+}
+
+function toNumber(value: string): number {
+  if (!value) return 0;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
 export default function EditMasterCompensationModal(props: Props) {
   const { masterId, masterName, masterType, onClose } = props;
 
@@ -33,13 +47,13 @@ export default function EditMasterCompensationModal(props: Props) {
   const [error, setError] = useState('');
 
   const [type, setType] = useState<CompensationType>('employee');
-  const [baseSalaryKzt, setBaseSalaryKzt] = useState('0');
-  const [commissionPercent, setCommissionPercent] = useState('0');
-  const [bonusKzt, setBonusKzt] = useState('0');
+  const [baseSalaryKzt, setBaseSalaryKzt] = useState('');
+  const [commissionPercent, setCommissionPercent] = useState('');
+  const [bonusKzt, setBonusKzt] = useState('');
 
   const [rentType, setRentType] = useState<RentType>('fixed');
-  const [fixedAmountKzt, setFixedAmountKzt] = useState('0');
-  const [percentageOfRevenue, setPercentageOfRevenue] = useState('0');
+  const [fixedAmountKzt, setFixedAmountKzt] = useState('');
+  const [percentageOfRevenue, setPercentageOfRevenue] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -49,12 +63,12 @@ export default function EditMasterCompensationModal(props: Props) {
     setLoading(true);
 
     setType(masterType === 'renter' ? 'renter' : 'employee');
-    setBaseSalaryKzt('0');
-    setCommissionPercent('0');
-    setBonusKzt('0');
+    setBaseSalaryKzt('');
+    setCommissionPercent('');
+    setBonusKzt('');
     setRentType('fixed');
-    setFixedAmountKzt('0');
-    setPercentageOfRevenue('0');
+    setFixedAmountKzt('');
+    setPercentageOfRevenue('');
 
     (async () => {
       try {
@@ -76,13 +90,13 @@ export default function EditMasterCompensationModal(props: Props) {
           if (c.type === 'renter') {
             setType('renter');
             setRentType(c.rentType === 'percentage' ? 'percentage' : 'fixed');
-            setFixedAmountKzt(String(c.fixedAmountKzt || 0));
-            setPercentageOfRevenue(String(c.percentageOfRevenue || 0));
+            setFixedAmountKzt(toFieldValue(c.fixedAmountKzt));
+            setPercentageOfRevenue(toFieldValue(c.percentageOfRevenue));
           } else if (c.type === 'employee') {
             setType('employee');
-            setBaseSalaryKzt(String(c.baseSalaryKzt || 0));
-            setCommissionPercent(String(c.commissionPercent || 0));
-            setBonusKzt(String(c.bonusKzt || 0));
+            setBaseSalaryKzt(toFieldValue(c.baseSalaryKzt));
+            setCommissionPercent(toFieldValue(c.commissionPercent));
+            setBonusKzt(toFieldValue(c.bonusKzt));
           }
         }
       } catch (err) {
@@ -114,15 +128,15 @@ export default function EditMasterCompensationModal(props: Props) {
       };
 
       if (type === 'employee') {
-        payload.baseSalaryKzt = Number(baseSalaryKzt);
-        payload.commissionPercent = Number(commissionPercent);
-        payload.bonusKzt = Number(bonusKzt);
+        payload.baseSalaryKzt = toNumber(baseSalaryKzt);
+        payload.commissionPercent = toNumber(commissionPercent);
+        payload.bonusKzt = toNumber(bonusKzt);
       } else {
         payload.rentType = rentType;
         if (rentType === 'fixed') {
-          payload.fixedAmountKzt = Number(fixedAmountKzt);
+          payload.fixedAmountKzt = toNumber(fixedAmountKzt);
         } else {
-          payload.percentageOfRevenue = Number(percentageOfRevenue);
+          payload.percentageOfRevenue = toNumber(percentageOfRevenue);
         }
       }
 
@@ -199,6 +213,7 @@ export default function EditMasterCompensationModal(props: Props) {
                     type="number"
                     min="0"
                     step="any"
+                    placeholder="0"
                     value={baseSalaryKzt}
                     onChange={(event) => setBaseSalaryKzt(event.target.value)}
                     className="mt-1 w-full rounded border px-3 py-2"
@@ -211,6 +226,7 @@ export default function EditMasterCompensationModal(props: Props) {
                     min="0"
                     max="100"
                     step="any"
+                    placeholder="0"
                     value={commissionPercent}
                     onChange={(event) => setCommissionPercent(event.target.value)}
                     className="mt-1 w-full rounded border px-3 py-2"
@@ -222,6 +238,7 @@ export default function EditMasterCompensationModal(props: Props) {
                     type="number"
                     min="0"
                     step="any"
+                    placeholder="0"
                     value={bonusKzt}
                     onChange={(event) => setBonusKzt(event.target.value)}
                     className="mt-1 w-full rounded border px-3 py-2"
@@ -265,6 +282,7 @@ export default function EditMasterCompensationModal(props: Props) {
                       type="number"
                       min="0"
                       step="any"
+                      placeholder="0"
                       value={fixedAmountKzt}
                       onChange={(event) => setFixedAmountKzt(event.target.value)}
                       className="mt-1 w-full rounded border px-3 py-2"
@@ -280,6 +298,7 @@ export default function EditMasterCompensationModal(props: Props) {
                       min="0"
                       max="100"
                       step="any"
+                      placeholder="0"
                       value={percentageOfRevenue}
                       onChange={(event) => setPercentageOfRevenue(event.target.value)}
                       className="mt-1 w-full rounded border px-3 py-2"
