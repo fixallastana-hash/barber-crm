@@ -34,9 +34,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!user?.tenantId) return;
+    let cancelled = false;
 
     const db = getFirebaseDb();
     getDoc(doc(db, 'tenants', user.tenantId, 'config', 'info')).then((snap) => {
+      if (cancelled) return;
       if (snap.exists()) {
         const salonInfo = snap.data() as SalonInfo;
         setInfo(salonInfo);
@@ -44,10 +46,13 @@ export default function SettingsPage() {
       }
       setLoading(false);
     }).catch(() => {
+      if (cancelled) return;
       setLoading(false);
       setMessage('Не удалось загрузить настройки салона');
     });
-  }, [user]);
+
+    return () => { cancelled = true; };
+  }, [user?.tenantId]);
 
   const handleSaveSlug = async () => {
     const normalizedSlug = slug.trim().toLowerCase();
@@ -82,7 +87,7 @@ export default function SettingsPage() {
     }
   };
 
-  const widgetUrl = `http://localhost:3001/book?slug=${encodeURIComponent(slug)}`;
+  const widgetUrl = 'https://barber-crm-widget.web.app/book?slug=' + encodeURIComponent(slug);
 
   const handleCopyLink = async () => {
     try {
