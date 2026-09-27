@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { AddAppointmentModal } from '@/components/add-appointment-modal';
 import { AppointmentDetailModal } from '@/components/appointment-detail-modal';
 import { CalendarGrid, type Appointment, type Master } from '@/components/calendar-grid';
@@ -25,39 +25,54 @@ export default function CalendarPage() {
   const [initialDate, setInitialDate] = useState<string | undefined>();
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
-  const loadData = useCallback(async () => {
-    if (!user?.tenantId || !selectedDate) {
+  useEffect(() => {
+    if (!user?.tenantId) {
       setLoading(false);
       return;
     }
-    setLoading(true);
-    setError('');
-    try {
-      const db = getFirebaseDb();
-      const [masterSnap, appointmentSnap] = await Promise.all([
-        getDocs(collection(db, 'tenants', user.tenantId, 'masters')),
-        getDocs(query(
-          collection(db, 'tenants', user.tenantId, 'appointments'),
-          where('date', '==', selectedDate),
-        )),
-      ]);
-      setMasters(masterSnap.docs
-        .map((item) => ({ id: item.id, ...(item.data() as Omit<Master, 'id'>) }))
-        .filter((master) => master.isActive));
-      const rows = appointmentSnap.docs.map((item) => ({
-        id: item.id,
-        ...(item.data() as Omit<Appointment, 'id'>),
-      }));
-      rows.sort((a, b) => a.startMinutes - b.startMinutes);
-      setAppointments(rows);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить календарь');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.tenantId, selectedDate]);
+    const db = getFirebaseDb();
 
-  useEffect(() => { void loadData(); }, [loadData]);
+    const unsubMasters = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'masters'),
+      (snap) => {
+        setMasters(snap.docs
+          .map((item) => ({ id: item.id, ...(item.data() as Omit<Master, 'id'>) }))
+          .filter((master) => master.isActive));
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+
+    return () => unsubMasters();
+  }, [user?.tenantId]);
+
+  useEffect(() => {
+    if (!user?.tenantId || !selectedDate) {
+      return;
+    }
+    const db = getFirebaseDb();
+
+    const unsubAppointments = onSnapshot(
+      query(
+        collection(db, 'tenants', user.tenantId, 'appointments'),
+        where('date', '==', selectedDate),
+      ),
+      (snap) => {
+        const rows = snap.docs.map((item) => ({
+          id: item.id,
+          ...(item.data() as Omit<Appointment, 'id'>),
+        }));
+        rows.sort((a, b) => a.startMinutes - b.startMinutes);
+        setAppointments(rows);
+      },
+      (err) => setError(err.message),
+    );
+
+    return () => unsubAppointments();
+  }, [user?.tenantId, selectedDate]);
 
   const openCreateModal = (masterId?: string, date?: string) => {
     setInitialMasterId(masterId);
@@ -95,7 +110,7 @@ export default function CalendarPage() {
         <AddAppointmentModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
-          onCreated={() => { void loadData(); }}
+          onCreated={() => { setShowCreateModal(false); }}
           tenantId={user.tenantId}
           initialMasterId={initialMasterId}
           initialDate={initialDate}
@@ -104,7 +119,7 @@ export default function CalendarPage() {
       <AppointmentDetailModal
         appointment={selectedAppointment}
         onClose={() => setSelectedAppointment(null)}
-        onUpdated={() => { void loadData(); }}
+        onUpdated={() => { setSelectedAppointment(null); }}
       />
     </div>
   );
