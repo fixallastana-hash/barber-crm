@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
@@ -31,6 +31,7 @@ export default function ServicesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showInactive, setShowInactive] = useState(false);
   const [categoryName, setCategoryName] = useState('');
   const [serviceName, setServiceName] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -83,6 +84,16 @@ export default function ServicesPage() {
     };
   }, [user?.tenantId]);
 
+  const visibleCategories = useMemo(
+    () => showInactive ? categories : categories.filter((c) => c.isActive),
+    [categories, showInactive],
+  );
+
+  const visibleServices = useMemo(
+    () => showInactive ? services : services.filter((s) => s.isActive),
+    [services, showInactive],
+  );
+
   const handleCreateCategory = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSavingCategory(true);
@@ -111,15 +122,15 @@ export default function ServicesPage() {
     setMessage('');
   };
 
-  const handleDeactivateCategory = async (categoryIdValue: string) => {
-    if (!window.confirm('Удалить категорию? Услуги в ней должны быть неактивны.')) {
+  const handleDeleteCategory = async (categoryIdValue: string) => {
+    if (!window.confirm('Удалить категорию навсегда? Действие необратимо.')) {
       return;
     }
     setError('');
     setMessage('');
     try {
-      const deactivateCategory = httpsCallable(getFirebaseFunctions(), 'deactivateCategory');
-      await deactivateCategory({ categoryId: categoryIdValue });
+      const deleteCategory = httpsCallable(getFirebaseFunctions(), 'deleteCategory');
+      await deleteCategory({ categoryId: categoryIdValue });
       setMessage('Категория удалена');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось удалить категорию');
@@ -153,15 +164,15 @@ export default function ServicesPage() {
     }
   };
 
-  const handleDeactivate = async (serviceId: string) => {
-    if (!window.confirm('Удалить услугу?')) {
+  const handleDeleteService = async (serviceId: string) => {
+    if (!window.confirm('Удалить услугу навсегда? Действие необратимо.')) {
       return;
     }
     setError('');
     setMessage('');
     try {
-      const deactivateService = httpsCallable(getFirebaseFunctions(), 'deactivateService');
-      await deactivateService({ serviceId });
+      const deleteService = httpsCallable(getFirebaseFunctions(), 'deleteService');
+      await deleteService({ serviceId });
       setMessage('Услуга удалена');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось удалить услугу');
@@ -184,6 +195,16 @@ export default function ServicesPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Услуги и категории</h1>
+
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={showInactive}
+          onChange={(event) => setShowInactive(event.target.checked)}
+        />
+        Показать неактивные
+      </label>
+
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {message && <p className="rounded bg-blue-50 p-3 text-sm text-blue-700">{message}</p>}
 
@@ -191,11 +212,11 @@ export default function ServicesPage() {
         <h2 className="mb-4 text-xl font-semibold">Категории</h2>
         <div className="grid gap-6 md:grid-cols-2">
           <div className="rounded-lg bg-white p-6 shadow">
-            {categories.length === 0 ? (
+            {visibleCategories.length === 0 ? (
               <p className="text-sm text-gray-500">Категорий пока нет.</p>
             ) : (
               <ul className="divide-y">
-                {categories.map((category) => (
+                {visibleCategories.map((category) => (
                   <li key={category.id} className="flex items-center justify-between py-3">
                     <span>
                       {category.name}
@@ -203,24 +224,22 @@ export default function ServicesPage() {
                         <span className="ml-2 text-xs text-red-500">(неактивна)</span>
                       )}
                     </span>
-                    {category.isActive && (
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleEditCategory(category)}
-                          className="text-sm text-blue-600 hover:text-blue-700"
-                        >
-                          Редактировать
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeactivateCategory(category.id)}
-                          className="text-sm text-red-600 hover:text-red-700"
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleEditCategory(category)}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        Редактировать
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteCategory(category.id)}
+                        className="text-sm text-red-600 hover:text-red-700"
+                      >
+                        Удалить
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -273,8 +292,10 @@ export default function ServicesPage() {
           </div>
         </form>
 
-        {services.length === 0 ? (
-          <div className="rounded-lg bg-white p-8 text-center text-gray-500 shadow">Услуг пока нет.</div>
+        {visibleServices.length === 0 ? (
+          <div className="rounded-lg bg-white p-8 text-center text-gray-500 shadow">
+            {showInactive ? 'Услуг пока нет.' : 'Активных услуг нет.'}
+          </div>
         ) : (
           <div className="overflow-x-auto rounded-lg bg-white shadow">
             <table className="min-w-full divide-y divide-gray-200">
@@ -289,7 +310,7 @@ export default function ServicesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {services.map((service) => {
+                {visibleServices.map((service) => {
                   const category = categories.find((item) => item.id === service.categoryId);
                   return (
                     <tr key={service.id}>
@@ -299,16 +320,14 @@ export default function ServicesPage() {
                       <td className="px-4 py-3 text-sm text-gray-600">{service.priceKzt.toLocaleString('ru-RU')} ₸</td>
                       <td className="px-4 py-3 text-sm">{service.isActive ? 'Активна' : 'Неактивна'}</td>
                       <td className="px-4 py-3 text-sm">
-                        {service.isActive && (
-                          <div className="flex flex-wrap gap-3">
-                            <button type="button" onClick={() => handleEdit(service)} className="text-blue-600 hover:text-blue-700">
-                              Редактировать
-                            </button>
-                            <button type="button" onClick={() => void handleDeactivate(service.id)} className="text-red-600 hover:text-red-700">
-                              Удалить
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex flex-wrap gap-3">
+                          <button type="button" onClick={() => handleEdit(service)} className="text-blue-600 hover:text-blue-700">
+                            Редактировать
+                          </button>
+                          <button type="button" onClick={() => void handleDeleteService(service.id)} className="text-red-600 hover:text-red-700">
+                            Удалить
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
