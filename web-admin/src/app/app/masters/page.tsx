@@ -203,10 +203,12 @@ export default function MastersPage() {
                 <div className="flex shrink-0 items-center">
                   {master.isActive && (
                     <>
-                      <button type="button" onClick={() => setCompensationMaster(master)}
-                        className="mr-3 text-sm text-blue-600 hover:text-blue-700">
-                        Компенсация
-                      </button>
+                      {user?.role === 'owner' && (
+                        <button type="button" onClick={() => setCompensationMaster(master)}
+                          className="mr-3 text-sm text-blue-600 hover:text-blue-700">
+                          Компенсация
+                        </button>
+                      )}
                       <button type="button" onClick={() => void handleCopyLink(master.id)}
                         className="mr-3 text-sm text-blue-600 hover:text-blue-700">
                         Ссылка для мастера
