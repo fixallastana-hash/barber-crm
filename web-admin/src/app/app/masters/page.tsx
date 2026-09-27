@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -35,33 +35,43 @@ export default function MastersPage() {
   const [error, setError] = useState('');
   const [compensationMaster, setCompensationMaster] = useState<Master | null>(null);
 
-  const loadData = useCallback(async () => {
+  useEffect(() => {
     if (!user?.tenantId) {
       setLoading(false);
       return;
     }
-    setLoading(true);
-    try {
-      const db = getFirebaseDb();
-      const [masterSnap, branchSnap] = await Promise.all([
-        getDocs(collection(db, 'tenants', user.tenantId, 'masters')),
-        getDocs(collection(db, 'tenants', user.tenantId, 'branches')),
-      ]);
-      setMasters(masterSnap.docs.map((item) => ({
-        id: item.id,
-        ...(item.data() as Omit<Master, 'id'>),
-      })));
-      setBranches(branchSnap.docs
-        .map((item) => ({ id: item.id, ...(item.data() as Omit<Branch, 'id'>) }))
-        .filter((branch) => branch.isActive));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить данные');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.tenantId]);
+    const db = getFirebaseDb();
 
-  useEffect(() => { void loadData(); }, [loadData]);
+    const unsubMasters = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'masters'),
+      (snap) => {
+        setMasters(snap.docs.map((item) => ({
+          id: item.id,
+          ...(item.data() as Omit<Master, 'id'>),
+        })));
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+
+    const unsubBranches = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'branches'),
+      (snap) => {
+        setBranches(snap.docs
+          .map((item) => ({ id: item.id, ...(item.data() as Omit<Branch, 'id'>) }))
+          .filter((branch) => branch.isActive));
+      },
+      (err) => setError(err.message),
+    );
+
+    return () => {
+      unsubMasters();
+      unsubBranches();
+    };
+  }, [user?.tenantId]);
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -75,7 +85,6 @@ export default function MastersPage() {
       setPrimaryBranchId('');
       setType('employee');
       setShowForm(false);
-      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать мастера');
     } finally {
@@ -89,7 +98,6 @@ export default function MastersPage() {
     try {
       const deactivateMaster = httpsCallable(getFirebaseFunctions(), 'deactivateMaster');
       await deactivateMaster({ masterId });
-      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось деактивировать мастера');
     }
