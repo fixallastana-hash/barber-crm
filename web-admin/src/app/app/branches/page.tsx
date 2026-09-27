@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { collection, getDocs, query } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -27,20 +27,28 @@ export default function BranchesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const loadBranches = async () => {
-    if (!user?.tenantId) return;
-    const db = getFirebaseDb();
-    const q = query(collection(db, 'tenants', user.tenantId, 'branches'));
-    const snap = await getDocs(q);
-    const list: Branch[] = [];
-    snap.forEach((d) => list.push({ id: d.id, ...(d.data() as Omit<Branch, 'id'>) }));
-    setBranches(list);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    loadBranches();
-  }, [user]);
+    if (!user?.tenantId) {
+      setLoading(false);
+      return;
+    }
+    const db = getFirebaseDb();
+    const unsub = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'branches'),
+      (snap) => {
+        setBranches(snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Branch, 'id'>),
+        })));
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+    return () => unsub();
+  }, [user?.tenantId]);
 
   const handleCreate = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -54,7 +62,6 @@ export default function BranchesPage() {
       setFormCity('');
       setFormPhone('');
       setShowForm(false);
-      await loadBranches();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -67,7 +74,6 @@ export default function BranchesPage() {
     try {
       const fn = httpsCallable(getFirebaseFunctions(), 'deactivateBranch');
       await fn({ branchId });
-      await loadBranches();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'unknown';
       alert('Ошибка: ' + errorMessage);
