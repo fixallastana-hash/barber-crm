@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -44,36 +44,44 @@ export default function ServicesPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const loadData = useCallback(async () => {
+  useEffect(() => {
     if (!user?.tenantId) {
       setLoading(false);
       return;
     }
-    setLoading(true);
-    try {
-      const db = getFirebaseDb();
-      const [categorySnap, serviceSnap] = await Promise.all([
-        getDocs(collection(db, 'tenants', user.tenantId, 'categories')),
-        getDocs(collection(db, 'tenants', user.tenantId, 'services')),
-      ]);
-      setCategories(categorySnap.docs.map((item) => ({
-        id: item.id,
-        ...(item.data() as Omit<Category, 'id'>),
-      })));
-      setServices(serviceSnap.docs.map((item) => ({
-        id: item.id,
-        ...(item.data() as Omit<Service, 'id'>),
-      })));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить данные');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.tenantId]);
+    const db = getFirebaseDb();
 
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    const unsubCategories = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'categories'),
+      (snap) => {
+        setCategories(snap.docs.map((item) => ({
+          id: item.id,
+          ...(item.data() as Omit<Category, 'id'>),
+        })));
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+
+    const unsubServices = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'services'),
+      (snap) => {
+        setServices(snap.docs.map((item) => ({
+          id: item.id,
+          ...(item.data() as Omit<Service, 'id'>),
+        })));
+      },
+      (err) => setError(err.message),
+    );
+
+    return () => {
+      unsubCategories();
+      unsubServices();
+    };
+  }, [user?.tenantId]);
 
   const handleCreateCategory = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -85,7 +93,6 @@ export default function ServicesPage() {
       await createCategory({ name: categoryName });
       setCategoryName('');
       setMessage('Категория создана');
-      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать категорию');
     } finally {
@@ -101,8 +108,7 @@ export default function ServicesPage() {
 
   const handleCategoryEditSaved = async () => {
     setError('');
-    setMessage('Категория обновлена');
-    await loadData();
+    setMessage('');
   };
 
   const handleDeactivateCategory = async (categoryIdValue: string) => {
@@ -115,7 +121,6 @@ export default function ServicesPage() {
       const deactivateCategory = httpsCallable(getFirebaseFunctions(), 'deactivateCategory');
       await deactivateCategory({ categoryId: categoryIdValue });
       setMessage('Категория удалена');
-      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось удалить категорию');
     }
@@ -141,7 +146,6 @@ export default function ServicesPage() {
       setBufferMinutes('0');
       setPriceKzt('');
       setMessage('Услуга создана');
-      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать услугу');
     } finally {
@@ -159,7 +163,6 @@ export default function ServicesPage() {
       const deactivateService = httpsCallable(getFirebaseFunctions(), 'deactivateService');
       await deactivateService({ serviceId });
       setMessage('Услуга удалена');
-      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось удалить услугу');
     }
@@ -174,7 +177,6 @@ export default function ServicesPage() {
   const handleEditSaved = async () => {
     setError('');
     setMessage('');
-    await loadData();
   };
 
   if (loading) return <p>Загрузка...</p>;
