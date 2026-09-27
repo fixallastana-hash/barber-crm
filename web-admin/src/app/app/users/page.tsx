@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -27,26 +27,27 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const loadUsers = useCallback(async () => {
+  useEffect(() => {
     if (!user?.tenantId || user.role !== 'owner') {
       setLoading(false);
       return;
     }
-    setLoading(true);
-    try {
-      const snap = await getDocs(collection(getFirebaseDb(), 'tenants', user.tenantId, 'users'));
-      setUsers(snap.docs.map((item) => ({
-        id: item.id,
-        ...(item.data() as Omit<SalonUser, 'id'>),
-      })));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить пользователей');
-    } finally {
-      setLoading(false);
-    }
+    const unsub = onSnapshot(
+      collection(getFirebaseDb(), 'tenants', user.tenantId, 'users'),
+      (snap) => {
+        setUsers(snap.docs.map((item) => ({
+          id: item.id,
+          ...(item.data() as Omit<SalonUser, 'id'>),
+        })));
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+    return () => unsub();
   }, [user?.tenantId, user?.role]);
-
-  useEffect(() => { void loadUsers(); }, [loadUsers]);
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -60,7 +61,6 @@ export default function UsersPage() {
       setPassword('');
       setPhone('');
       setShowForm(false);
-      await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать администратора');
     } finally {
