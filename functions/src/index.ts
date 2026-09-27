@@ -361,6 +361,47 @@ export const updateMasterCompensation = onCall(async (request) => {
   return { success: true };
 });
 
+// ============ getMasterCompensation ============
+
+export const getMasterCompensation = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+
+  if (role !== 'owner') {
+    throw new HttpsError('permission-denied', 'Only owner allowed');
+  }
+
+  const data = request.data || {};
+  const masterId = data.masterId;
+
+  if (!masterId) {
+    throw new HttpsError('invalid-argument', 'masterId is required');
+  }
+
+  const masterRef = db.doc('tenants/' + tenantId + '/masters/' + masterId);
+  const masterSnap = await masterRef.get();
+
+  if (!masterSnap.exists) {
+    throw new HttpsError('not-found', 'Master not found');
+  }
+
+  const compensationSnap = await masterRef
+    .collection('private')
+    .doc('compensation')
+    .get();
+
+  if (!compensationSnap.exists) {
+    return {
+      exists: false,
+      compensation: null,
+    };
+  }
+
+  return {
+    exists: true,
+    compensation: compensationSnap.data() || null,
+  };
+});
+
 // ============ deactivateMaster ============
 
 export const deactivateMaster = onCall(async (request) => {
