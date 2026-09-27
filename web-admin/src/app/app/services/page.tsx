@@ -6,6 +6,7 @@ import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import EditServiceModal from '@/components/edit-service-modal';
+import EditCategoryModal from '@/components/edit-category-modal';
 
 type Category = {
   id: string;
@@ -39,6 +40,7 @@ export default function ServicesPage() {
   const [savingCategory, setSavingCategory] = useState(false);
   const [savingService, setSavingService] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -91,6 +93,34 @@ export default function ServicesPage() {
     }
   };
 
+  const handleEditCategory = (category: Category) => {
+    setError('');
+    setMessage('');
+    setEditingCategory(category);
+  };
+
+  const handleCategoryEditSaved = async () => {
+    setError('');
+    setMessage('Категория обновлена');
+    await loadData();
+  };
+
+  const handleDeactivateCategory = async (categoryIdValue: string) => {
+    if (!window.confirm('Удалить категорию? Услуги в ней должны быть неактивны.')) {
+      return;
+    }
+    setError('');
+    setMessage('');
+    try {
+      const deactivateCategory = httpsCallable(getFirebaseFunctions(), 'deactivateCategory');
+      await deactivateCategory({ categoryId: categoryIdValue });
+      setMessage('Категория удалена');
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить категорию');
+    }
+  };
+
   const handleCreateService = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSavingService(true);
@@ -120,7 +150,7 @@ export default function ServicesPage() {
   };
 
   const handleDeactivate = async (serviceId: string) => {
-    if (!window.confirm('Деактивировать услугу?')) {
+    if (!window.confirm('Удалить услугу?')) {
       return;
     }
     setError('');
@@ -128,10 +158,10 @@ export default function ServicesPage() {
     try {
       const deactivateService = httpsCallable(getFirebaseFunctions(), 'deactivateService');
       await deactivateService({ serviceId });
-      setMessage('Услуга деактивирована');
+      setMessage('Услуга удалена');
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось деактивировать услугу');
+      setError(err instanceof Error ? err.message : 'Не удалось удалить услугу');
     }
   };
 
@@ -164,9 +194,31 @@ export default function ServicesPage() {
             ) : (
               <ul className="divide-y">
                 {categories.map((category) => (
-                  <li key={category.id} className="flex justify-between py-3">
-                    <span>{category.name}</span>
-                    {!category.isActive && <span className="text-sm text-red-500">Неактивна</span>}
+                  <li key={category.id} className="flex items-center justify-between py-3">
+                    <span>
+                      {category.name}
+                      {!category.isActive && (
+                        <span className="ml-2 text-xs text-red-500">(неактивна)</span>
+                      )}
+                    </span>
+                    {category.isActive && (
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleEditCategory(category)}
+                          className="text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          Редактировать
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeactivateCategory(category.id)}
+                          className="text-sm text-red-600 hover:text-red-700"
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -251,7 +303,7 @@ export default function ServicesPage() {
                               Редактировать
                             </button>
                             <button type="button" onClick={() => void handleDeactivate(service.id)} className="text-red-600 hover:text-red-700">
-                              Деактивировать
+                              Удалить
                             </button>
                           </div>
                         )}
@@ -270,6 +322,15 @@ export default function ServicesPage() {
         onClose={() => setEditingService(null)}
         onSaved={handleEditSaved}
       />
+
+      {editingCategory && (
+        <EditCategoryModal
+          categoryId={editingCategory.id}
+          initialName={editingCategory.name}
+          onClose={() => setEditingCategory(null)}
+          onSaved={handleCategoryEditSaved}
+        />
+      )}
     </div>
   );
 }
