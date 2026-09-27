@@ -6,6 +6,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
+import EditMasterCompensationModal from '@/components/edit-master-compensation-modal';
 
 type Branch = { id: string; name: string; isActive: boolean };
 type Master = {
@@ -32,6 +33,7 @@ export default function MastersPage() {
   const [type, setType] = useState<'employee' | 'renter'>('employee');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [compensationMaster, setCompensationMaster] = useState<Master | null>(null);
 
   const loadData = useCallback(async () => {
     if (!user?.tenantId) {
@@ -201,6 +203,10 @@ export default function MastersPage() {
                 <div className="flex shrink-0 items-center">
                   {master.isActive && (
                     <>
+                      <button type="button" onClick={() => setCompensationMaster(master)}
+                        className="mr-3 text-sm text-blue-600 hover:text-blue-700">
+                        Компенсация
+                      </button>
                       <button type="button" onClick={() => void handleCopyLink(master.id)}
                         className="mr-3 text-sm text-blue-600 hover:text-blue-700">
                         Ссылка для мастера
@@ -216,6 +222,15 @@ export default function MastersPage() {
             );
           })}
         </div>
+      )}
+
+      {compensationMaster && (
+        <EditMasterCompensationModal
+          masterId={compensationMaster.id}
+          masterName={compensationMaster.name}
+          masterType={compensationMaster.type}
+          onClose={() => setCompensationMaster(null)}
+        />
       )}
     </div>
   );
