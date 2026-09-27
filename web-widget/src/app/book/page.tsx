@@ -12,7 +12,7 @@ type Slot = { start: number; end: number; time: string };
 type SalonData = { tenant: { name: string; city: string }; categories: Category[]; services: Service[]; masters: Master[] };
 
 function formatPrice(kzt: number): string {
-  return (kzt / 100).toLocaleString('ru-RU') + ' ₸';
+  return kzt.toLocaleString('ru-RU') + ' ₸';
 }
 
 function formatRating(rating: number, count: number): string {
