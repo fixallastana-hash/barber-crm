@@ -298,6 +298,7 @@ export default function MastersPage() {
           >
             {saving ? 'Создание...' : 'Создать мастера'}
           </button>
-        </form>
+         </form>
       )}
-            {masters.length === 0 ? (
+
+      {masters.length === 0 ? (
