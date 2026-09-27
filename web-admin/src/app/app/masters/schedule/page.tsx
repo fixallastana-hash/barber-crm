@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useSearchParams } from 'next/navigation';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
@@ -54,16 +54,15 @@ function ScheduleEditor() {
   useEffect(() => {
     if (!user?.tenantId || !masterId) { setLoading(false); return; }
     let cancelled = false;
-    const load = async () => {
+
+    (async () => {
       setLoading(true);
       setError('');
       try {
         const db = getFirebaseDb();
-        const [masterSnap, branchSnap, serviceSnap] = await Promise.all([
-          getDoc(doc(db, 'tenants', user.tenantId!, 'masters', masterId)),
-          getDocs(collection(db, 'tenants', user.tenantId!, 'branches')),
-          getDocs(collection(db, 'tenants', user.tenantId!, 'services')),
-        ]);
+        const masterSnap = await getDoc(
+          doc(db, 'tenants', user.tenantId!, 'masters', masterId),
+        );
         if (cancelled) return;
         if (masterSnap.exists()) {
           const data = masterSnap.data() as Master;
@@ -74,25 +73,50 @@ function ScheduleEditor() {
           setMaster(null);
           setError('Мастер не найден');
         }
-        setBranches(branchSnap.docs.map((item) => ({
-          id: item.id, ...(item.data() as Omit<Branch, 'id'>),
-        })).filter((branch) => branch.isActive));
-        setServices(serviceSnap.docs.map((item) => ({
-          id: item.id, ...(item.data() as Omit<Service, 'id'>),
-        })).filter((service) => service.isActive));
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить данные мастера');
       } finally {
         if (!cancelled) setLoading(false);
       }
-    };
-    void load();
+    })();
+
     return () => { cancelled = true; };
   }, [user?.tenantId, masterId]);
+
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    const db = getFirebaseDb();
+
+    const unsubBranches = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'branches'),
+      (snap) => {
+        setBranches(snap.docs
+          .map((item) => ({ id: item.id, ...(item.data() as Omit<Branch, 'id'>) }))
+          .filter((branch) => branch.isActive));
+      },
+      (err) => setError(err.message),
+    );
+
+    const unsubServices = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'services'),
+      (snap) => {
+        setServices(snap.docs
+          .map((item) => ({ id: item.id, ...(item.data() as Omit<Service, 'id'>) }))
+          .filter((service) => service.isActive));
+      },
+      (err) => setError(err.message),
+    );
+
+    return () => {
+      unsubBranches();
+      unsubServices();
+    };
+  }, [user?.tenantId]);
 
   const updateDay = (key: keyof Schedule, update: (day: DaySchedule) => DaySchedule) => {
     setSchedule((current) => ({ ...current, [key]: update(current[key]) }));
   };
+
   const handleSave = async () => {
     if (!masterId) return;
     setSaving(true); setError(''); setMessage('');
