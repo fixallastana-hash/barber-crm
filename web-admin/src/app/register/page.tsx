@@ -19,9 +19,8 @@ export default function RegisterPage() {
     setError('');
     setLoading(true);
     try {
-      const functions = getFirebaseFunctions();
-      const registerSalon = httpsCallable(functions, 'registerSalon');
-      await registerSalon({ salonName, email, password });
+      const registerSalon = httpsCallable(getFirebaseFunctions(), 'registerSalon');
+      await registerSalon({ salonName, email: email.trim(), password });
       router.push('/login');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка регистрации');
@@ -31,29 +30,43 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md bg-white p-8 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-6 text-center">Регистрация салона</h1>
-        {error && <p className="mb-4 text-red-600 text-sm">{error}</p>}
-        <label className="block mb-4">
-          <span className="text-sm text-gray-700">Название салона</span>
-          <input type="text" value={salonName} onChange={(e) => setSalonName(e.target.value)} required className="mt-1 w-full px-3 py-2 border rounded" />
-        </label>
-        <label className="block mb-4">
-          <span className="text-sm text-gray-700">Email</span>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="mt-1 w-full px-3 py-2 border rounded" />
-        </label>
-        <label className="block mb-6">
-          <span className="text-sm text-gray-700">Пароль (мин. 8 символов)</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} className="mt-1 w-full px-3 py-2 border rounded" />
-        </label>
-        <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50">
-          {loading ? 'Регистрация...' : 'Зарегистрироваться'}
-        </button>
-        <p className="mt-4 text-sm text-center text-gray-600">
-          Уже есть аккаунт? <Link href="/login" className="text-blue-600">Войти</Link>
-        </p>
-      </form>
+    <main className="auth-page">
+      <div className="auth-wrap">
+        <div className="auth-brand">
+          <div className="auth-mark">B</div>
+          <div className="auth-kicker">BARBER CRM</div>
+          <h1 className="auth-title">Создайте салон</h1>
+          <p className="auth-subtitle">Начните управлять записями, мастерами и клиентами</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="auth-card">
+          {error && <div className="auth-error">{error}</div>}
+
+          <label className="auth-field">
+            <span className="auth-label">Название салона</span>
+            <input className="auth-input" type="text" value={salonName} onChange={(e) => setSalonName(e.target.value)} required placeholder="Название салона" />
+          </label>
+
+          <label className="auth-field">
+            <span className="auth-label">Email</span>
+            <input className="auth-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@example.com" />
+          </label>
+
+          <label className="auth-field">
+            <span className="auth-label">Пароль</span>
+            <input className="auth-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" placeholder="Минимум 8 символов" />
+          </label>
+
+          <button type="submit" disabled={loading} className="auth-submit">
+            {loading ? 'Регистрация...' : 'Зарегистрировать салон'}
+          </button>
+
+          <div className="auth-divider">или</div>
+          <p className="auth-footer">Уже есть аккаунт? <Link href="/login" className="auth-link">Войти</Link></p>
+        </form>
+
+        <p className="auth-note">После регистрации вы получите доступ владельца</p>
+      </div>
     </main>
   );
 }
