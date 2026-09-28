@@ -15,6 +15,13 @@
         { "fieldPath": "masterId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "masters",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "accessToken", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

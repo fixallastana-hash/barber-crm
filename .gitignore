@@ -19,3 +19,17 @@ web-widget/out/
 web-widget/.next/
 web-admin/next-env.d.ts
 web-widget/next-env.d.ts
+
+# Claude scratch and backups
+*-before-design.*
+*-before-new-design.*
+*-before-book-design.*
+*-before-master-design.*
+*.backup
+master-page-current.txt
+web-admin-old/
+web-admin-backup/
+
+# Next.js build artifacts
+out/
+.next/

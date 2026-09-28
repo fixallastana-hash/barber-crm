@@ -4,13 +4,13 @@
       "target": "admin",
       "public": "web-admin/out",
       "ignore": ["firebase.json", "/.*", "/node_modules/**"],
-      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+      "cleanUrls": true
     },
     {
       "target": "widget",
       "public": "web-widget/out",
       "ignore": ["firebase.json", "/.*", "/node_modules/**"],
-      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+      "cleanUrls": true
     }
   ],
   "functions": {
