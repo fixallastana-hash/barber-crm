@@ -10,25 +10,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
+    if (!loading && !user) router.push('/login');
   }, [user, loading, router]);
 
   if (loading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center">
-        Загрузка...
-      </main>
-    );
+    return <main className="page-loading">Загрузка...</main>;
   }
 
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="app-shell">
       <Sidebar />
-      <main className="flex-1 p-8">{children}</main>
+      <main className="app-main">
+        <div className="app-content">{children}</div>
+      </main>
     </div>
   );
 }
