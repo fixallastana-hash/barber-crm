@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { WidgetFooter } from '@/components/widget-footer';
 
 export const metadata: Metadata = {
   title: 'Barber CRM Widget',
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      <body className="flex min-h-screen flex-col bg-[#FAFAFA] text-[#1A1A1A]">
+        <div className="flex-1">{children}</div>
+        <WidgetFooter />
+      </body>
     </html>
   );
 }
