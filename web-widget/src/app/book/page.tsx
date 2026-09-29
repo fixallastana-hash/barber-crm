@@ -11,6 +11,8 @@ type Category = { id: string; name: string };
 type Slot = { start: number; end: number; time: string };
 type SalonData = { tenant: { name: string; city: string }; categories: Category[]; services: Service[]; masters: Master[] };
 
+const ANY_MASTER = '__any__';
+
 const money = (n: number) => n.toLocaleString('ru-RU') + ' ₸';
 const rating = (n: number, count: number) => count ? `★ ${n.toFixed(1)} · ${count}` : 'Пока нет отзывов';
 const dateRu = (s: string) => s ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(s + 'T12:00:00Z')) : '';
@@ -26,6 +28,7 @@ function BookingFlow() {
   const [categoryId, setCategoryId] = useState('');
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [masterId, setMasterId] = useState('');
+  const [assignedMasterId, setAssignedMasterId] = useState('');
   const [date, setDate] = useState('');
   const [slot, setSlot] = useState<Slot | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -73,20 +76,55 @@ function BookingFlow() {
     if (salon?.categories.length && !categoryId) setCategoryId(salon.categories[0].id);
   }, [salon, categoryId]);
 
+  const eligibleMasters = salon
+    ? salon.masters.filter(m => m.serviceIds?.some(id => serviceIds.includes(id)))
+    : [];
+
   const loadSlots = useCallback(async () => {
     if (step !== 3 || !slug || !masterId || !date || !salon) return;
-    const duration = serviceIds.reduce((sum, id) => sum + (salon.services.find(s => s.id === id)?.durationMinutes || 0), 0);
+    const duration = serviceIds.reduce(
+      (sum, id) => sum + (salon.services.find(s => s.id === id)?.durationMinutes || 0), 0
+    );
     if (!duration) { setSlots([]); return; }
-    setLoadingSlots(true); setSlot(null); setError('');
+
+    setLoadingSlots(true); setSlot(null); setAssignedMasterId(''); setError('');
+
     try {
       const fn = httpsCallable(getFirebaseFunctions(), 'widgetGetSlots');
-      const response = await fn({ slug, masterId, date, durationMinutes: duration });
-      setSlots(((response.data as { slots?: Slot[] }).slots) || []);
+
+      if (masterId !== ANY_MASTER) {
+        const response = await fn({ slug, masterId, date, durationMinutes: duration });
+        const raw = ((response.data as { slots?: Slot[] }).slots) || [];
+        setSlots(raw);
+        setAssignedMasterId(masterId);
+      } else {
+        const results = await Promise.all(
+          eligibleMasters.map(async (m) => {
+            try {
+              const response = await fn({ slug, masterId: m.id, date, durationMinutes: duration });
+              return { masterId: m.id, slots: ((response.data as { slots?: Slot[] }).slots) || [] };
+            } catch {
+              return { masterId: m.id, slots: [] as Slot[] };
+            }
+          })
+        );
+
+        const byStart = new Map<number, Slot>();
+        results.forEach(r => {
+          r.slots.forEach(s => {
+            if (!byStart.has(s.start)) byStart.set(s.start, s);
+          });
+        });
+        setSlots(Array.from(byStart.values()).sort((a, b) => a.start - b.start));
+        setAssignedMasterId('');
+      }
     } catch {
       setSlots([]);
       setError('Не удалось загрузить свободное время. Попробуйте ещё раз.');
-    } finally { setLoadingSlots(false); }
-  }, [step, slug, masterId, date, serviceIds, salon]);
+    } finally {
+      setLoadingSlots(false);
+    }
+  }, [step, slug, masterId, date, serviceIds, salon, eligibleMasters]);
 
   useEffect(() => { void loadSlots(); }, [loadSlots]);
 
@@ -98,13 +136,47 @@ function BookingFlow() {
   const max = new Date(today.getFullYear(), today.getMonth(), today.getDate()+30);
   const maxDate = `${max.getFullYear()}-${String(max.getMonth()+1).padStart(2,'0')}-${String(max.getDate()).padStart(2,'0')}`;
 
+  const pickMaster = (id: string) => {
+    setMasterId(id);
+    setStep(3);
+    setError('');
+  };
+
+  const pickSlot = async (chosen: Slot) => {
+    if (masterId === ANY_MASTER) {
+      const duration = serviceIds.reduce(
+        (sum, id) => sum + (salon?.services.find(s => s.id === id)?.durationMinutes || 0), 0
+      );
+      const fn = httpsCallable(getFirebaseFunctions(), 'widgetGetSlots');
+      let foundId = '';
+      for (const m of eligibleMasters) {
+        try {
+          const response = await fn({ slug, masterId: m.id, date, durationMinutes: duration });
+          const list = ((response.data as { slots?: Slot[] }).slots) || [];
+          if (list.some(s => s.start === chosen.start)) {
+            foundId = m.id;
+            break;
+          }
+        } catch { /* пробуем следующего */ }
+      }
+      setAssignedMasterId(foundId || eligibleMasters[0]?.id || '');
+    }
+    setSlot(chosen);
+    setStep(4);
+    setError('');
+  };
+
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!slug || !slot || !consent) return;
+    const finalMasterId = masterId === ANY_MASTER ? assignedMasterId : masterId;
+    if (!slug || !slot || !consent || !finalMasterId) return;
     setSubmitting(true); setError('');
     try {
       const fn = httpsCallable(getFirebaseFunctions(), 'widgetCreateAppointment');
-      await fn({ slug, masterId, serviceIds, date, startMinutes: slot.start, clientName: name, clientPhone: phone, consent });
+      await fn({
+        slug, masterId: finalMasterId, serviceIds, date,
+        startMinutes: slot.start, clientName: name, clientPhone: phone, consent,
+      });
       setSuccess(true);
     } catch (err) {
       const e = err as { code?: string; message?: string };
@@ -121,7 +193,7 @@ function BookingFlow() {
   if (status === 'loading') {
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="rounded-2xl border border-line bg-card px-6 py-4 text-sm text-muted">
+        <div className="rounded-2xl border border-line bg-card px-6 py-4 text-base text-muted">
           Загрузка…
         </div>
       </main>
@@ -132,8 +204,8 @@ function BookingFlow() {
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
         <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-6 text-center">
-          <b className="block text-base text-ink">Салон больше не принимает записи</b>
-          <span className="mt-2 block text-sm text-muted">
+          <b className="block text-lg text-ink">Салон больше не принимает записи</b>
+          <span className="mt-2 block text-base text-muted">
             Пожалуйста, свяжитесь с салоном напрямую.
           </span>
         </div>
@@ -145,8 +217,8 @@ function BookingFlow() {
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
         <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-6 text-center">
-          <b className="block text-base text-ink">Салон не найден</b>
-          <span className="mt-2 block text-sm text-muted">
+          <b className="block text-lg text-ink">Салон не найден</b>
+          <span className="mt-2 block text-base text-muted">
             Проверьте ссылку на запись.
           </span>
         </div>
@@ -158,16 +230,16 @@ function BookingFlow() {
     return (
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary text-2xl text-ink">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-3xl text-ink">
             ✓
           </div>
-          <div className="mt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+          <div className="mt-5 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
             BARBER CRM
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink">
             Запись отправлена
           </h1>
-          <p className="mt-3 text-sm leading-6 text-muted">
+          <p className="mt-3 text-base leading-6 text-muted">
             Отлично! Мы свяжемся с вами для подтверждения записи.
           </p>
         </div>
@@ -176,32 +248,30 @@ function BookingFlow() {
   }
 
   const selectedMaster = salon.masters.find(m => m.id === masterId);
+  const assignedMaster = salon.masters.find(m => m.id === assignedMasterId);
   const services = salon.services.filter(s => s.categoryId === categoryId);
-  const masters = salon.masters.filter(m => m.serviceIds?.some(id => serviceIds.includes(id)));
   const selectedServices = salon.services.filter(s => serviceIds.includes(s.id));
   const totalPrice = selectedServices.reduce((sum, s) => sum + s.priceKzt, 0);
   const steps = ['Услуги', 'Мастер', 'Время', 'Контакты'];
 
   return (
-    <main className="min-h-screen bg-surface px-4 py-6 pb-28">
+    <main className="min-h-screen bg-surface px-4 py-6 pb-32">
       <div className="mx-auto w-full max-w-md">
-        {/* Header */}
         <header className="mb-6 flex items-start justify-between gap-3">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
               {salon.tenant.city || 'Онлайн-запись'}
             </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-ink">
               {salon.tenant.name}
             </h1>
-            <p className="mt-1 text-xs text-muted">Онлайн-запись</p>
+            <p className="mt-1 text-sm text-muted">Онлайн-запись</p>
           </div>
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-lg font-bold text-ink">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-2xl text-ink">
             ✂
           </div>
         </header>
 
-        {/* Progress */}
         <div className="mb-6 flex items-center gap-1.5">
           {steps.map((label, i) => {
             const active = step === i + 1;
@@ -210,13 +280,13 @@ function BookingFlow() {
               <div key={label} className="flex flex-1 flex-col items-center gap-1.5">
                 <div
                   className={[
-                    'flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition',
+                    'flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition',
                     active ? 'bg-primary text-ink' : done ? 'bg-ink text-white' : 'bg-white text-muted border border-line',
                   ].join(' ')}
                 >
                   {done ? '✓' : i + 1}
                 </div>
-                <small className={`text-[10px] font-medium ${active ? 'text-ink' : 'text-muted'}`}>
+                <small className={`text-xs font-medium ${active ? 'text-ink' : 'text-muted'}`}>
                   {label}
                 </small>
               </div>
@@ -225,27 +295,26 @@ function BookingFlow() {
         </div>
 
         {error && (
-          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
             <b className="block font-semibold">Не получилось</b>
             <span className="mt-0.5 block">{error}</span>
           </div>
         )}
 
-        {/* STEP 1 — SERVICES */}
         {step === 1 && (
           <section>
             <div className="mb-4 flex items-end justify-between gap-3">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
                   Шаг 1
                 </div>
-                <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
                   Выберите услуги
                 </h2>
-                <p className="mt-1 text-xs text-muted">Можно несколько</p>
+                <p className="mt-1 text-sm text-muted">Можно несколько</p>
               </div>
               {serviceIds.length > 0 && (
-                <strong className="text-base font-semibold text-ink">{money(totalPrice)}</strong>
+                <strong className="text-lg font-semibold text-ink">{money(totalPrice)}</strong>
               )}
             </div>
 
@@ -256,7 +325,7 @@ function BookingFlow() {
                   type="button"
                   onClick={() => setCategoryId(c.id)}
                   className={[
-                    'shrink-0 rounded-full px-4 py-2 text-xs font-medium transition',
+                    'shrink-0 rounded-full px-4 py-2.5 text-sm font-medium transition',
                     categoryId === c.id
                       ? 'bg-ink text-white'
                       : 'border border-line bg-white text-muted hover:border-ink hover:text-ink',
@@ -282,26 +351,26 @@ function BookingFlow() {
                   >
                     <span
                       className={[
-                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition',
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition',
                         checked ? 'border-primary bg-primary text-ink' : 'border-line bg-white text-transparent',
                       ].join(' ')}
                     >
                       ✓
                     </span>
                     <span className="min-w-0 flex-1">
-                      <b className="block truncate text-sm font-semibold text-ink">{s.name}</b>
-                      <small className="mt-0.5 block text-xs text-muted">
+                      <b className="block truncate text-base font-semibold text-ink">{s.name}</b>
+                      <small className="mt-0.5 block text-sm text-muted">
                         {s.durationMinutes} мин
                       </small>
                     </span>
-                    <strong className="shrink-0 text-sm font-semibold text-ink">
+                    <strong className="shrink-0 text-base font-semibold text-ink">
                       {money(s.priceKzt)}
                     </strong>
                   </button>
                 );
               })}
               {!services.length && (
-                <div className="rounded-2xl border border-line bg-card p-6 text-center text-sm text-muted">
+                <div className="rounded-2xl border border-line bg-card p-6 text-center text-base text-muted">
                   В этой категории пока нет услуг.
                 </div>
               )}
@@ -309,33 +378,32 @@ function BookingFlow() {
           </section>
         )}
 
-        {/* STEP 2 — MASTERS */}
         {step === 2 && (
           <section>
             <button
               type="button"
               onClick={() => setStep(1)}
-              className="mb-4 text-xs font-medium text-muted transition hover:text-ink"
+              className="mb-4 text-sm font-medium text-muted transition hover:text-ink"
             >
               ← Назад
             </button>
             <div className="mb-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+              <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
                 Шаг 2
               </div>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
                 Выберите мастера
               </h2>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-sm text-muted">
                 Кто будет выполнять выбранные услуги
               </p>
             </div>
             <div className="space-y-2">
-              {masters.map(m => (
+              {eligibleMasters.map(m => (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => { setMasterId(m.id); setStep(3); setError(''); }}
+                  onClick={() => pickMaster(m.id)}
                   className="flex w-full items-center gap-3 rounded-2xl border border-line bg-card p-4 text-left transition hover:border-ink/30"
                 >
                   {m.photoUrl ? (
@@ -343,67 +411,88 @@ function BookingFlow() {
                     <img
                       src={m.photoUrl}
                       alt=""
-                      className="h-12 w-12 shrink-0 rounded-full object-cover"
+                      className="h-14 w-14 shrink-0 rounded-full object-cover"
                     />
                   ) : (
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface text-base font-semibold text-muted">
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-surface text-lg font-semibold text-muted">
                       {m.name.slice(0, 1)}
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
-                    <b className="block truncate text-sm font-semibold text-ink">{m.name}</b>
-                    <small className="mt-0.5 block text-xs text-muted">
+                    <b className="block truncate text-base font-semibold text-ink">{m.name}</b>
+                    <small className="mt-0.5 block text-sm text-muted">
                       {rating(m.rating || 0, m.ratingCount || 0)}
                     </small>
                   </span>
-                  <i className="shrink-0 text-muted not-italic">→</i>
+                  <i className="shrink-0 text-lg text-muted not-italic">→</i>
                 </button>
               ))}
-              {!masters.length && (
-                <div className="rounded-2xl border border-line bg-card p-6 text-center text-sm text-muted">
-                  Мет достурных мастеров для выбранных услуг.
+
+              {eligibleMasters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => pickMaster(ANY_MASTER)}
+                  className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-primary bg-primary/5 p-4 text-left transition hover:bg-primary/10"
+                >
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-2xl text-ink">
+                    ★
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <b className="block text-base font-semibold text-ink">Не важно</b>
+                    <small className="mt-0.5 block text-sm text-muted">
+                      Подберём свободного мастера
+                    </small>
+                  </span>
+                  <i className="shrink-0 text-lg text-muted not-italic">→</i>
+                </button>
+              )}
+
+              {!eligibleMasters.length && (
+                <div className="rounded-2xl border border-line bg-card p-6 text-center text-base text-muted">
+                  Нет доступных мастеров для выбранных услуг.
                 </div>
               )}
             </div>
           </section>
         )}
 
-        {/* STEP 3 — DATE & TIME */}
         {step === 3 && (
           <section>
             <button
               type="button"
               onClick={() => setStep(2)}
-              className="mb-4 text-xs font-medium text-muted transition hover:text-ink"
+              className="mb-4 text-sm font-medium text-muted transition hover:text-ink"
             >
               ← Назад
             </button>
             <div className="mb-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+              <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
                 Шаг 3
               </div>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
                 Дата и время
               </h2>
-              <p className="mt-1 text-xs text-muted">
-                {selectedMaster?.name || 'Выберите удобное время'}
+              <p className="mt-1 text-sm text-muted">
+                {masterId === ANY_MASTER
+                  ? 'Показываем время у всех свободных мастеров'
+                  : (selectedMaster?.name || 'Выберите удобное время')}
               </p>
             </div>
 
             <label className="mb-4 block">
-              <span className="mb-2 block text-xs font-medium text-muted">Дата записи</span>
+              <span className="mb-2 block text-sm font-medium text-muted">Дата записи</span>
               <input
                 type="date"
                 min={todayString}
                 max={maxDate}
                 value={date}
                 onChange={e => { setDate(e.target.value); setSlots([]); }}
-                className="h-12 w-full rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                className="h-14 w-full rounded-xl border border-line bg-card px-4 text-base text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
             </label>
 
             {loadingSlots ? (
-              <div className="rounded-2xl border border-line bg-card p-6 text-center text-sm text-muted">
+              <div className="rounded-2xl border border-line bg-card p-6 text-center text-base text-muted">
                 Загружаем свободное время…
               </div>
             ) : date ? (
@@ -412,14 +501,14 @@ function BookingFlow() {
                   <button
                     key={s.start}
                     type="button"
-                    onClick={() => { setSlot(s); setStep(4); setError(''); }}
-                    className="rounded-xl border border-line bg-card px-3 py-3 text-sm font-medium text-ink transition hover:border-primary hover:bg-primary/10"
+                    onClick={() => void pickSlot(s)}
+                    className="rounded-xl border border-line bg-card px-3 py-3.5 text-base font-medium text-ink transition hover:border-primary hover:bg-primary/10"
                   >
                     {s.time}
                   </button>
                 ))}
                 {!slots.length && (
-                  <div className="col-span-3 rounded-2xl border border-line bg-card p-6 text-center text-sm text-muted">
+                  <div className="col-span-3 rounded-2xl border border-line bg-card p-6 text-center text-base text-muted">
                     Свободного времени нет.
                   </div>
                 )}
@@ -428,69 +517,72 @@ function BookingFlow() {
           </section>
         )}
 
-        {/* STEP 4 — CONTACTS */}
         {step === 4 && slot && (
           <section>
             <button
               type="button"
               onClick={() => setStep(3)}
-              className="mb-4 text-xs font-medium text-muted transition hover:text-ink"
+              className="mb-4 text-sm font-medium text-muted transition hover:text-ink"
             >
               ← Назад
             </button>
             <div className="mb-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+              <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
                 Шаг 4
               </div>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
                 Ваши контакты
               </h2>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-sm text-muted">
                 Укажите данные для подтверждения записи
               </p>
             </div>
 
-            <div className="mb-5 space-y-2 rounded-2xl border border-line bg-card p-4 text-sm">
+            <div className="mb-5 space-y-3 rounded-2xl border border-line bg-card p-4 text-base">
               <div className="flex justify-between gap-4">
-                <span className="shrink-0 text-xs text-muted">Услуги</span>
-                <b className="text-right font-medium text-ink">
+                <span className="shrink-0 text-sm text-muted">Услуги</span>
+                <b className="text-right text-base font-medium text-ink">
                   {selectedServices.map(s => s.name).join(', ')}
                 </b>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="shrink-0 text-xs text-muted">Мастер</span>
-                <b className="text-right font-medium text-ink">{selectedMaster?.name}</b>
+                <span className="shrink-0 text-sm text-muted">Мастер</span>
+                <b className="text-right text-base font-medium text-ink">
+                  {masterId === ANY_MASTER
+                    ? (assignedMaster ? `${assignedMaster.name} (любой)` : 'Любой доступный')
+                    : selectedMaster?.name}
+                </b>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="shrink-0 text-xs text-muted">Дата и время</span>
-                <b className="text-right font-medium text-ink">{dateRu(date)}, {slot.time}</b>
+                <span className="shrink-0 text-sm text-muted">Дата и время</span>
+                <b className="text-right text-base font-medium text-ink">{dateRu(date)}, {slot.time}</b>
               </div>
-              <div className="flex justify-between gap-4 border-t border-line pt-2">
-                <span className="shrink-0 text-xs text-muted">Стоимость</span>
-                <b className="text-right font-semibold text-ink">{money(totalPrice)}</b>
+              <div className="flex justify-between gap-4 border-t border-line pt-3">
+                <span className="shrink-0 text-sm text-muted">Стоимость</span>
+                <b className="text-right text-lg font-semibold text-ink">{money(totalPrice)}</b>
               </div>
             </div>
 
             <form onSubmit={submit} className="space-y-4">
               <label className="block">
-                <span className="mb-2 block text-xs font-medium text-muted">Имя</span>
+                <span className="mb-2 block text-sm font-medium text-muted">Имя</span>
                 <input
                   required
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Как к вам обращаться?"
-                  className="h-12 w-full rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30"
+                  className="h-14 w-full rounded-xl border border-line bg-card px-4 text-base text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30"
                 />
               </label>
               <label className="block">
-                <span className="mb-2 block text-xs font-medium text-muted">Телефон</span>
+                <span className="mb-2 block text-sm font-medium text-muted">Телефон</span>
                 <input
                   required
                   type="tel"
                   value={phone}
                   onChange={e => setPhone(e.target.value)}
                   placeholder="+7 ___ ___ __ __"
-                  className="h-12 w-full rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30"
+                  className="h-14 w-full rounded-xl border border-line bg-card px-4 text-base text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30"
                 />
               </label>
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-card p-4">
@@ -499,16 +591,16 @@ function BookingFlow() {
                   type="checkbox"
                   checked={consent}
                   onChange={e => setConsent(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#F4C842]"
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-[#F4C842]"
                 />
-                <span className="text-xs leading-5 text-muted">
+                <span className="text-sm leading-6 text-muted">
                   Согласен на обработку персональных данных
                 </span>
               </label>
               <button
                 type="submit"
                 disabled={submitting || !consent}
-                className="h-12 w-full rounded-xl bg-primary text-sm font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? 'Отправляем…' : 'Подтвердить запись'}
               </button>
@@ -517,7 +609,6 @@ function BookingFlow() {
         )}
       </div>
 
-      {/* Sticky bottom CTA on step 1 */}
       {step === 1 && (
         <div className="fixed inset-x-0 bottom-0 border-t border-line bg-card/95 px-4 py-3 backdrop-blur">
           <div className="mx-auto w-full max-w-md">
@@ -525,7 +616,7 @@ function BookingFlow() {
               type="button"
               disabled={!serviceIds.length}
               onClick={() => setStep(2)}
-              className="h-12 w-full rounded-xl bg-primary text-sm font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               Продолжить →
             </button>
@@ -541,7 +632,7 @@ export default function BookPage() {
     <Suspense
       fallback={
         <main className="flex min-h-screen items-center justify-center px-4">
-          <div className="rounded-2xl border border-line bg-card px-6 py-4 text-sm text-muted">
+          <div className="rounded-2xl border border-line bg-card px-6 py-4 text-base text-muted">
             Загрузка…
           </div>
         </main>

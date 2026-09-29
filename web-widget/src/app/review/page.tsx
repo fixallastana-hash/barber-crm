@@ -65,19 +65,19 @@ function ReviewForm() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-surface px-4 py-8">
         <section className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary text-2xl text-ink">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-3xl text-ink">
             ✓
           </div>
 
-          <div className="mt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+          <div className="mt-5 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
             Ваша оценка
           </div>
 
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink">
             Спасибо за оценку!
           </h1>
 
-          <p className="mt-3 text-sm leading-6 text-muted">
+          <p className="mt-3 text-base leading-6 text-muted">
             Ваш отзыв поможет нам становиться лучше.
           </p>
         </section>
@@ -88,24 +88,24 @@ function ReviewForm() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface px-4 py-8">
       <section className="w-full max-w-sm rounded-2xl border border-line bg-card p-6 shadow-sm sm:p-8">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-xl text-ink">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-2xl text-ink">
           ★
         </div>
 
-        <div className="mt-4 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+        <div className="mt-5 text-center text-xs font-semibold uppercase tracking-[0.15em] text-muted">
           Barber CRM
         </div>
 
-        <h1 className="mt-2 text-center text-2xl font-semibold tracking-tight text-ink">
+        <h1 className="mt-2 text-center text-3xl font-semibold tracking-tight text-ink">
           Оцените визит
         </h1>
 
-        <p className="mt-2 text-center text-sm leading-6 text-muted">
+        <p className="mt-3 text-center text-base leading-6 text-muted">
           Расскажите, как прошёл ваш визит.
         </p>
 
         <div
-          className="mt-7 flex items-center justify-center gap-2"
+          className="mt-8 flex items-center justify-center gap-2"
           onMouseLeave={() => setHoverRating(0)}
         >
           {[1, 2, 3, 4, 5].map((star) => {
@@ -122,7 +122,7 @@ function ReviewForm() {
                 onBlur={() => setHoverRating(0)}
                 onClick={() => setRating(star)}
                 className={[
-                  'h-10 w-10 transition-transform sm:h-12 sm:w-12',
+                  'h-12 w-12 transition-transform sm:h-14 sm:w-14',
                   active ? 'scale-105 text-primary' : 'text-line',
                   'hover:scale-110',
                 ].join(' ')}
@@ -133,14 +133,14 @@ function ReviewForm() {
           })}
         </div>
 
-        <div className="mt-4 text-center text-sm font-medium text-ink">
+        <div className="mt-5 text-center text-base font-medium text-ink">
           {rating === 0 ? 'Выберите оценку' : `${rating} из 5`}
         </div>
 
         {error && (
           <div
             role="alert"
-            className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm leading-5 text-red-700"
+            className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700"
           >
             {error}
           </div>
@@ -150,7 +150,7 @@ function ReviewForm() {
           type="button"
           onClick={() => void submit()}
           disabled={sending || rating < 1}
-          className="mt-6 h-12 w-full rounded-xl bg-primary text-sm font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-6 h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {sending ? 'Отправляем...' : 'Отправить оценку'}
         </button>
@@ -164,7 +164,7 @@ export default function ReviewPage() {
     <Suspense
       fallback={
         <main className="flex min-h-screen items-center justify-center bg-surface px-4">
-          <div className="rounded-2xl border border-line bg-card px-6 py-4 text-sm text-muted">
+          <div className="rounded-2xl border border-line bg-card px-6 py-4 text-base text-muted">
             Загрузка…
           </div>
         </main>
