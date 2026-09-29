@@ -5,6 +5,23 @@ import { useSearchParams } from 'next/navigation';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
 
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth={filled ? 0 : 1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="h-full w-full"
+    >
+      <path d="M12 2.5l2.95 5.98 6.6.96-4.78 4.66 1.13 6.57L12 17.56l-5.9 3.11 1.13-6.57L2.45 9.44l6.6-.96L12 2.5z" />
+    </svg>
+  );
+}
+
 function ReviewForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token') ?? '';
@@ -46,17 +63,21 @@ function ReviewForm() {
 
   if (submitted) {
     return (
-      <main className="review-page">
-        <section className="review-card review-success-card">
-          <div className="review-success-icon" aria-hidden="true">
+      <main className="flex min-h-screen items-center justify-center bg-surface px-4 py-8">
+        <section className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary text-2xl text-ink">
             ✓
           </div>
 
-          <div className="review-kicker">ВАША ОЦЕНКА</div>
+          <div className="mt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+            Ваша оценка
+          </div>
 
-          <h1>Спасибо за оценку!</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">
+            Спасибо за оценку!
+          </h1>
 
-          <p>
+          <p className="mt-3 text-sm leading-6 text-muted">
             Ваш отзыв поможет нам становиться лучше.
           </p>
         </section>
@@ -65,22 +86,26 @@ function ReviewForm() {
   }
 
   return (
-    <main className="review-page">
-      <section className="review-card">
-        <div className="review-brand-mark" aria-hidden="true">
+    <main className="flex min-h-screen items-center justify-center bg-surface px-4 py-8">
+      <section className="w-full max-w-sm rounded-2xl border border-line bg-card p-6 shadow-sm sm:p-8">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-xl text-ink">
           ★
         </div>
 
-        <div className="review-kicker">BARBER CRM</div>
+        <div className="mt-4 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+          Barber CRM
+        </div>
 
-        <h1>Оцените визит</h1>
+        <h1 className="mt-2 text-center text-2xl font-semibold tracking-tight text-ink">
+          Оцените визит
+        </h1>
 
-        <p className="review-subtitle">
+        <p className="mt-2 text-center text-sm leading-6 text-muted">
           Расскажите, как прошёл ваш визит.
         </p>
 
         <div
-          className="review-stars"
+          className="mt-7 flex items-center justify-center gap-2"
           onMouseLeave={() => setHoverRating(0)}
         >
           {[1, 2, 3, 4, 5].map((star) => {
@@ -96,24 +121,27 @@ function ReviewForm() {
                 onFocus={() => setHoverRating(star)}
                 onBlur={() => setHoverRating(0)}
                 onClick={() => setRating(star)}
-                className={
-                  active
-                    ? 'review-star review-star-active'
-                    : 'review-star'
-                }
+                className={[
+                  'h-10 w-10 transition-transform sm:h-12 sm:w-12',
+                  active ? 'scale-105 text-primary' : 'text-line',
+                  'hover:scale-110',
+                ].join(' ')}
               >
-                {active ? '★' : '☆'}
+                <StarIcon filled={active} />
               </button>
             );
           })}
         </div>
 
-        <div className="review-rating-caption">
+        <div className="mt-4 text-center text-sm font-medium text-ink">
           {rating === 0 ? 'Выберите оценку' : `${rating} из 5`}
         </div>
 
         {error && (
-          <div className="review-error" role="alert">
+          <div
+            role="alert"
+            className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm leading-5 text-red-700"
+          >
             {error}
           </div>
         )}
@@ -122,7 +150,7 @@ function ReviewForm() {
           type="button"
           onClick={() => void submit()}
           disabled={sending || rating < 1}
-          className="review-submit"
+          className="mt-6 h-12 w-full rounded-xl bg-primary text-sm font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {sending ? 'Отправляем...' : 'Отправить оценку'}
         </button>
@@ -135,10 +163,10 @@ export default function ReviewPage() {
   return (
     <Suspense
       fallback={
-        <main className="review-page">
-          <section className="review-card review-loading-card">
-            Загрузка...
-          </section>
+        <main className="flex min-h-screen items-center justify-center bg-surface px-4">
+          <div className="rounded-2xl border border-line bg-card px-6 py-4 text-sm text-muted">
+            Загрузка…
+          </div>
         </main>
       }
     >
