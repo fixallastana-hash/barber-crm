@@ -119,13 +119,14 @@ export default function BranchesPage() {
     return (
       <div className="min-w-0">
         <div className="mb-8">
-          <div className="h-3 w-20 animate-pulse rounded bg-gray-200" />
-          <div className="mt-3 h-8 w-32 animate-pulse rounded-lg bg-gray-200" />
+          <div className="h-3 w-32 animate-pulse rounded bg-gray-200" />
+          <div className="mt-3 h-8 w-40 animate-pulse rounded-lg bg-gray-200" />
+          <div className="mt-2 h-4 w-64 animate-pulse rounded bg-gray-200" />
         </div>
 
         <div className="space-y-3">
-          <div className="h-24 animate-pulse rounded-2xl border border-gray-200 bg-white" />
-          <div className="h-24 animate-pulse rounded-2xl border border-gray-200 bg-white" />
+          <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" />
+          <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" />
         </div>
       </div>
     );
@@ -134,33 +135,29 @@ export default function BranchesPage() {
   return (
     <div className="min-w-0">
       {/* Header */}
-      <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#aaa6a0]">
-            Структура бизнеса
-          </div>
-
-          <h1 className="text-[28px] font-semibold tracking-[-0.035em] text-[#171717]">
-            Филиалы
-          </h1>
-
-          <p className="mt-1 text-sm text-[#8b8781]">
-            Управление филиалами и их контактными данными
-          </p>
+      <div className="mb-6">
+        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#aaa6a0]">
+          Структура бизнеса
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowForm((visible) => !visible)}
-          className="inline-flex h-11 items-center justify-center rounded-xl bg-[#171717] px-5 text-sm font-medium text-white shadow-sm transition hover:bg-[#292929] active:scale-[0.99]"
-        >
-          <span className="mr-2 text-lg leading-none">
-            {showForm ? '×' : '+'}
-          </span>
+        <h1 className="text-[28px] font-semibold tracking-[-0.035em] text-[#171717]">
+          Филиалы
+        </h1>
 
-          {showForm ? 'Отмена' : 'Добавить филиал'}
-        </button>
+        <p className="mt-1 text-sm text-[#8b8781]">
+          Управление филиалами и их контактными данными
+        </p>
       </div>
+
+      {/* Кнопка "Добавить филиал" — на всю ширину */}
+      <button
+        type="button"
+        onClick={() => setShowForm((visible) => !visible)}
+        className="mb-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#171717] text-sm font-medium text-white transition hover:bg-[#292929] active:scale-[0.99]"
+      >
+        <span className="text-lg leading-none">{showForm ? '×' : '+'}</span>
+        <span>{showForm ? 'Отмена' : 'Добавить филиал'}</span>
+      </button>
 
       {/* Error */}
       {error && (
@@ -294,77 +291,73 @@ export default function BranchesPage() {
           {branches.map((branch) => (
             <div
               key={branch.id}
-              className="crm-card p-4 sm:p-5"
+              className="crm-card p-5"
             >
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#f1f1ee] text-[#66615b]">
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M3 21h18" />
-                      <path d="M5 21V7l7-4 7 4v14" />
-                      <path d="M9 21v-6h6v6" />
-                      <path d="M9 9h.01" />
-                      <path d="M15 9h.01" />
-                    </svg>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-[#292725]">
-                        {branch.name}
-                      </p>
-
-                      {branch.isActive ? (
-                        <span className="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700">
-                          Активен
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700">
-                          Неактивен
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-1.5 space-y-0.5 text-sm text-[#8b8781]">
-                      {(branch.city || branch.address) && (
-                        <p className="break-words">
-                          {[branch.city, branch.address]
-                            .filter(Boolean)
-                            .join(', ')}
-                        </p>
-                      )}
-
-                      {branch.phone && (
-                        <p className="break-words">{branch.phone}</p>
-                      )}
-                    </div>
-                  </div>
+              {/* Верхняя часть: иконка + информация */}
+              <div className="flex items-start gap-3">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#f1f1ee] text-[#66615b]">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 21h18" />
+                    <path d="M5 21V7l7-4 7 4v14" />
+                    <path d="M9 21v-6h6v6" />
+                    <path d="M9 9h.01" />
+                    <path d="M15 9h.01" />
+                  </svg>
                 </div>
 
-                {branch.isActive && (
-                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void handleDeactivate(branch.id)
-                      }
-                      className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
-                    >
-                      Деактивировать
-                    </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[17px] font-semibold text-[#292725]">
+                      {branch.name}
+                    </p>
+
+                    {branch.isActive ? (
+                      <span className="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700">
+                        Активен
+                      </span>
+                    ) : (
+                      <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700">
+                        Неактивен
+                      </span>
+                    )}
                   </div>
-                )}
+
+                  <div className="mt-2 space-y-0.5 text-sm text-[#8b8781]">
+                    {(branch.city || branch.address) && (
+                      <p className="break-words">
+                        {[branch.city, branch.address]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </p>
+                    )}
+
+                    {branch.phone && (
+                      <p className="break-words">{branch.phone}</p>
+                    )}
+                  </div>
+                </div>
               </div>
+
+              {/* Кнопка "Деактивировать" на всю ширину */}
+              {branch.isActive && (
+                <button
+                  type="button"
+                  onClick={() => void handleDeactivate(branch.id)}
+                  className="mt-4 flex h-11 w-full items-center justify-center rounded-xl border border-black bg-white text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                >
+                  Деактивировать
+                </button>
+              )}
             </div>
           ))}
         </div>
