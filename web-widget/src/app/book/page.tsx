@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
@@ -76,9 +76,10 @@ function BookingFlow() {
     if (salon?.categories.length && !categoryId) setCategoryId(salon.categories[0].id);
   }, [salon, categoryId]);
 
-  const eligibleMasters = salon
-    ? salon.masters.filter(m => m.serviceIds?.some(id => serviceIds.includes(id)))
-    : [];
+  const eligibleMasters = useMemo(() => {
+    if (!salon) return [];
+    return salon.masters.filter(m => m.serviceIds?.some(id => serviceIds.includes(id)));
+  }, [salon, serviceIds]);
 
   const loadSlots = useCallback(async () => {
     if (step !== 3 || !slug || !masterId || !date || !salon) return;
