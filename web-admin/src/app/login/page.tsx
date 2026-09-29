@@ -45,8 +45,7 @@ export default function LoginPage() {
       const auth = getFirebaseAuth();
 
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      // Редирект на /app делается автоматически в /app/layout.tsx,
-      // когда auth-context получит user с tenantId.
+      // Редирект на /app делает auth-context в /app/layout.tsx
     } catch (err) {
       const code =
         typeof err === 'object' && err !== null && 'code' in err
@@ -129,6 +128,15 @@ export default function LoginPage() {
             >
               {loading ? 'Входим...' : 'Войти'}
             </button>
+
+            <div className="mt-4 text-center">
+              <Link
+                href="/forgot-password"
+                className="text-sm text-[#77736d] underline decoration-[#c7c3bd] underline-offset-4 transition hover:text-[#171717] hover:decoration-[#171717]"
+              >
+                Забыли пароль?
+              </Link>
+            </div>
 
             <div className="my-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-[#ebe8e3]" />
