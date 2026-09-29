@@ -2,13 +2,34 @@
 
 import { useState, type FormEvent } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getFirebaseAuth } from '@/lib/firebase';
 
-export default function LoginPage() {
-  const router = useRouter();
+function mapFirebaseError(code: string): string {
+  switch (code) {
+    case 'auth/invalid-api-key':
+    case 'auth/api-key-not-valid':
+      return 'Проверьте NEXT_PUBLIC_FIREBASE_API_KEY в .env.local и пересоберите проект.';
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Неверный email или пароль.';
+    case 'auth/user-disabled':
+      return 'Аккаунт отключён. Обратитесь к владельцу салона.';
+    case 'auth/operation-not-allowed':
+      return 'Провайдер Email/Password выключен в Firebase Console.';
+    case 'auth/too-many-requests':
+      return 'Слишком много попыток входа. Попробуйте позже.';
+    case 'auth/network-request-failed':
+      return 'Нет связи с сервером. Проверьте интернет.';
+    case 'auth/invalid-email':
+      return 'Некорректный email.';
+    default:
+      return `Не удалось войти (${code || 'unknown'}). Попробуйте ещё раз.`;
+  }
+}
 
+export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,15 +44,15 @@ export default function LoginPage() {
     try {
       const auth = getFirebaseAuth();
 
-      await signInWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password,
-      );
-
-      router.push('/app');
-    } catch {
-      setError('Неверный email или пароль');
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      // Редирект на /app делается автоматически в /app/layout.tsx,
+      // когда auth-context получит user с tenantId.
+    } catch (err) {
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: unknown }).code)
+          : '';
+      setError(mapFirebaseError(code));
     } finally {
       setLoading(false);
     }
@@ -41,7 +62,6 @@ export default function LoginPage() {
     <main className="min-h-screen bg-[#f7f6f3] px-4 py-8 sm:px-6">
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
         <div className="w-full max-w-[430px]">
-          {/* Brand */}
           <div className="mb-8 text-center">
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#171717] text-xl font-semibold text-white shadow-sm">
               B
@@ -60,7 +80,6 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Card */}
           <form
             onSubmit={handleSubmit}
             className="rounded-[24px] border border-[#e7e4df] bg-white p-5 shadow-[0_12px_40px_rgba(0,0,0,0.06)] sm:p-7"
@@ -113,9 +132,7 @@ export default function LoginPage() {
 
             <div className="my-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-[#ebe8e3]" />
-              <span className="text-xs text-[#aaa6a0]">
-                или
-              </span>
+              <span className="text-xs text-[#aaa6a0]">или</span>
               <div className="h-px flex-1 bg-[#ebe8e3]" />
             </div>
 
