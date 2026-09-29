@@ -1,15 +1,28 @@
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { getFunctions, Functions } from 'firebase/functions';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFunctions, type Functions } from 'firebase/functions';
+
+const FUNCTIONS_REGION =
+  process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'asia-east1';
+
+function readEnv(name: string, value: string | undefined): string {
+  if (!value || value.length === 0) {
+    throw new Error(
+      `Missing required environment variable: ${name}. ` +
+        `Создайте web-admin/.env.local по образцу .env.example и пересоберите проект.`,
+    );
+  }
+  return value;
+}
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'placeholder',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'placeholder',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'placeholder',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'placeholder',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || 'placeholder',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || 'placeholder',
+  apiKey: readEnv('NEXT_PUBLIC_FIREBASE_API_KEY', process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+  authDomain: readEnv('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN', process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+  projectId: readEnv('NEXT_PUBLIC_FIREBASE_PROJECT_ID', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+  storageBucket: readEnv('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET', process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+  messagingSenderId: readEnv('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+  appId: readEnv('NEXT_PUBLIC_FIREBASE_APP_ID', process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
 };
 
 let app: FirebaseApp | null = null;
@@ -40,7 +53,7 @@ export function getFirebaseDb(): Firestore {
 
 export function getFirebaseFunctions(): Functions {
   if (!functionsInstance) {
-    functionsInstance = getFunctions(getFirebaseApp(), 'asia-east1');
+    functionsInstance = getFunctions(getFirebaseApp(), FUNCTIONS_REGION);
   }
   return functionsInstance;
 }
