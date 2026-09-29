@@ -1,46 +1,27 @@
 'use client';
 
-export type Appointment = {
-  id: string;
-  masterId: string;
-  masterName: string;
-  clientId: string;
-  clientName: string;
-  clientPhone?: string;
-  serviceNames: string[];
-  date: string;
-  startMinutes: number;
-  endMinutes: number;
-  totalPriceKzt: number;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'noshow';
-};
-
-export type Master = {
-  id: string;
-  name: string;
-  isActive: boolean;
-  color?: string;
-};
+import { type Appointment, type Master } from './calendar-grid';
 
 type Props = {
   masters: Master[];
   appointments: Appointment[];
   onAppointmentClick: (appointment: Appointment) => void;
-  onEmptySlotClick: (masterId: string, startMinutes: number) => void;
 };
 
-const START_MINUTES = 480;
-const END_MINUTES = 1320;
-const SLOT_STEP = 30;
-const ROW_HEIGHT = 60;
-const GRID_HEIGHT = ((END_MINUTES - START_MINUTES) / SLOT_STEP) * ROW_HEIGHT;
+const statusLabels: Record<Appointment['status'], string> = {
+  pending: 'Ожидает',
+  confirmed: 'Подтверждена',
+  completed: 'Завершена',
+  cancelled: 'Отменена',
+  noshow: 'Не пришёл',
+};
 
 const statusClasses: Record<Appointment['status'], string> = {
-  pending: 'bg-yellow-100 border-yellow-400',
-  confirmed: 'bg-blue-100 border-blue-400',
-  completed: 'bg-green-100 border-green-400',
-  cancelled: 'bg-gray-100 border-gray-400',
-  noshow: 'bg-red-100 border-red-400',
+  pending: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+  confirmed: 'bg-blue-50 text-blue-700 border-blue-200',
+  completed: 'bg-green-50 text-green-700 border-green-200',
+  cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
+  noshow: 'bg-red-50 text-red-700 border-red-200',
 };
 
 function minutesToTime(minutes: number): string {
@@ -51,132 +32,94 @@ function minutesToTime(minutes: number): string {
   );
 }
 
-export function CalendarGrid({
+export function CalendarList({
   masters,
   appointments,
   onAppointmentClick,
-  onEmptySlotClick,
 }: Props) {
-  const rows = Array.from(
-    { length: (END_MINUTES - START_MINUTES) / SLOT_STEP },
-    (_, index) => START_MINUTES + index * SLOT_STEP,
-  );
+  if (appointments.length === 0) {
+    return (
+      <div className="p-10 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#f1f1ee] text-[#737373]">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="3" y="4.5" width="18" height="16" rx="2" />
+            <path d="M16 2.5v4M8 2.5v4M3 9h18" />
+          </svg>
+        </div>
+        <p className="mt-4 text-sm font-medium text-[#404040]">
+          На этот день записей нет
+        </p>
+        <p className="mt-1 text-sm text-[#9a9690]">
+          Нажмите «Новая запись», чтобы добавить.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-w-[900px] rounded-lg border border-gray-200 bg-white shadow">
-      <div className="sticky top-0 z-20 flex border-b border-gray-300 bg-white">
-        <div className="w-20 shrink-0 border-r border-gray-200 p-3 text-xs font-medium text-gray-500">
-          Время
-        </div>
+    <div className="divide-y divide-gray-200">
+      {appointments.map((appointment) => {
+        const master = masters.find((m) => m.id === appointment.masterId);
 
-        {masters.map((master) => (
-          <div
-            key={master.id}
-            className="flex min-w-[160px] flex-1 items-center gap-2 border-r border-gray-200 px-3 py-3 text-sm font-semibold"
+        return (
+          <button
+            key={appointment.id}
+            type="button"
+            onClick={() => onAppointmentClick(appointment)}
+            className="flex w-full gap-3 p-3 text-left transition hover:bg-gray-50 active:bg-gray-100"
           >
-            <span
-              className="h-3 w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: master.color || '#4A90D9' }}
-            />
-            <span className="truncate">{master.name}</span>
-          </div>
-        ))}
-      </div>
-
-      {masters.length === 0 ? (
-        <p className="p-8 text-center text-sm text-gray-500">
-          Нет активных мастеров.
-        </p>
-      ) : (
-        <div className="flex">
-          <div className="w-20 shrink-0">
-            {rows.map((start) => (
-              <div
-                key={start}
-                style={{ height: ROW_HEIGHT }}
-                className="border-b border-r border-gray-200 px-2 pt-1 text-xs text-gray-500"
-              >
-                {minutesToTime(start)}
+            <div className="shrink-0 pt-0.5">
+              <div className="text-sm font-semibold text-[#171717]">
+                {minutesToTime(appointment.startMinutes)}
               </div>
-            ))}
-          </div>
+              <div className="text-[11px] text-gray-500">
+                {minutesToTime(appointment.endMinutes)}
+              </div>
+            </div>
 
-          {masters.map((master) => {
-            const masterAppointments = appointments.filter(
-              (appointment) => appointment.masterId === master.id,
-            );
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate text-sm font-semibold text-[#171717]">
+                  {appointment.clientName}
+                </span>
+                <span
+                  className={`inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                    statusClasses[appointment.status]
+                  }`}
+                >
+                  {statusLabels[appointment.status]}
+                </span>
+              </div>
 
-            return (
-              <div
-                key={master.id}
-                className="relative min-w-[160px] flex-1 border-r border-gray-200"
-                style={{ height: GRID_HEIGHT }}
-              >
-                {rows.map((start) => (
-                  <button
-                    key={start}
-                    type="button"
-                    aria-label={master.name + ' ' + minutesToTime(start)}
-                    onClick={() => onEmptySlotClick(master.id, start)}
-                    className="absolute left-0 right-0 border-b border-gray-200 bg-white text-left hover:bg-gray-50"
-                    style={{
-                      top: ((start - START_MINUTES) / SLOT_STEP) * ROW_HEIGHT,
-                      height: ROW_HEIGHT,
-                    }}
+              <p className="mt-1 truncate text-xs text-gray-600">
+                {appointment.serviceNames.join(', ')}
+              </p>
+
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-500">
+                {master?.color && (
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: master.color }}
                   />
-                ))}
-
-                {masterAppointments.map((appointment) => {
-                  const visibleStart = Math.max(
-                    appointment.startMinutes,
-                    START_MINUTES,
-                  );
-                  const visibleEnd = Math.min(
-                    appointment.endMinutes,
-                    END_MINUTES,
-                  );
-
-                  if (visibleEnd <= visibleStart) {
-                    return null;
-                  }
-
-                  const top =
-                    ((visibleStart - START_MINUTES) / SLOT_STEP) * ROW_HEIGHT;
-
-                  const height = Math.max(
-                    ROW_HEIGHT,
-                    ((visibleEnd - visibleStart) / SLOT_STEP) * ROW_HEIGHT,
-                  );
-
-                  return (
-                    <button
-                      key={appointment.id}
-                      type="button"
-                      onClick={() => onAppointmentClick(appointment)}
-                      className={
-                        'absolute left-1 right-1 z-10 overflow-hidden rounded border p-1 text-left text-xs shadow-sm hover:brightness-95 ' +
-                        statusClasses[appointment.status]
-                      }
-                      style={{ top, height }}
-                    >
-                      <span className="block truncate font-semibold">
-                        {appointment.clientName}
-                      </span>
-                      <span className="block truncate">
-                        {appointment.serviceNames.join(', ')}
-                      </span>
-                      <span className="block truncate text-gray-600">
-                        {minutesToTime(appointment.startMinutes)}–
-                        {minutesToTime(appointment.endMinutes)}
-                      </span>
-                    </button>
-                  );
-                })}
+                )}
+                <span className="truncate">
+                  {appointment.masterName || master?.name || '—'}
+                </span>
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

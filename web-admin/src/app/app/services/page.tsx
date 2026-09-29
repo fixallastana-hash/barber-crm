@@ -1,76 +1,64 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { AddAppointmentModal } from '@/components/add-appointment-modal';
-import { AppointmentDetailModal } from '@/components/appointment-detail-modal';
-import {
-  CalendarGrid,
-  type Appointment,
-  type Master,
-} from '@/components/calendar-grid';
-import { getFirebaseDb } from '@/lib/firebase';
+import { useEffect, useMemo, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
+import EditServiceModal from '@/components/edit-service-modal';
+import EditCategoryModal from '@/components/edit-category-modal';
 
-function todayAsDateInput(): string {
-  const now = new Date();
+type Category = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  order?: number;
+};
 
-  return (
-    now.getFullYear() +
-    '-' +
-    String(now.getMonth() + 1).padStart(2, '0') +
-    '-' +
-    String(now.getDate()).padStart(2, '0')
-  );
-}
+type Service = {
+  id: string;
+  name: string;
+  categoryId: string;
+  categoryName?: string;
+  durationMinutes: number;
+  bufferMinutes: number;
+  priceKzt: number;
+  isActive: boolean;
+};
 
-function formatDate(value: string): string {
-  if (!value) return '';
-
-  const date = new Date(`${value}T00:00:00`);
-
-  return date.toLocaleDateString('ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
-}
-
-export default function CalendarPage() {
+export default function ServicesPage() {
   const { user } = useAuth();
-
-  const [selectedDate, setSelectedDate] = useState(todayAsDateInput);
-  const [masters, setMasters] = useState<Master[]>([]);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showInactive, setShowInactive] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
+  const [serviceName, setServiceName] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState('');
+  const [bufferMinutes, setBufferMinutes] = useState('0');
+  const [priceKzt, setPriceKzt] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [savingService, setSavingService] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [error, setError] = useState('');
-
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [initialMasterId, setInitialMasterId] = useState<string | undefined>();
-  const [initialDate, setInitialDate] = useState<string | undefined>();
-  const [selectedAppointment, setSelectedAppointment] =
-    useState<Appointment | null>(null);
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     if (!user?.tenantId) {
       setLoading(false);
       return;
     }
-
     const db = getFirebaseDb();
 
-    const unsubMasters = onSnapshot(
-      collection(db, 'tenants', user.tenantId, 'masters'),
+    const unsubCategories = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'categories'),
       (snap) => {
-        setMasters(
-          snap.docs
-            .map((item) => ({
-              id: item.id,
-              ...(item.data() as Omit<Master, 'id'>),
-            }))
-            .filter((master) => master.isActive),
-        );
-
+        setCategories(snap.docs.map((item) => ({
+          id: item.id,
+          ...(item.data() as Omit<Category, 'id'>),
+        })));
         setLoading(false);
       },
       (err) => {
@@ -79,170 +67,300 @@ export default function CalendarPage() {
       },
     );
 
-    return () => unsubMasters();
-  }, [user?.tenantId]);
-
-  useEffect(() => {
-    if (!user?.tenantId || !selectedDate) {
-      return;
-    }
-
-    const db = getFirebaseDb();
-
-    const unsubAppointments = onSnapshot(
-      query(
-        collection(db, 'tenants', user.tenantId, 'appointments'),
-        where('date', '==', selectedDate),
-      ),
+    const unsubServices = onSnapshot(
+      collection(db, 'tenants', user.tenantId, 'services'),
       (snap) => {
-        const rows = snap.docs.map((item) => ({
+        setServices(snap.docs.map((item) => ({
           id: item.id,
-          ...(item.data() as Omit<Appointment, 'id'>),
-        }));
-
-        rows.sort((a, b) => a.startMinutes - b.startMinutes);
-        setAppointments(rows);
+          ...(item.data() as Omit<Service, 'id'>),
+        })));
       },
       (err) => setError(err.message),
     );
 
-    return () => unsubAppointments();
-  }, [user?.tenantId, selectedDate]);
+    return () => {
+      unsubCategories();
+      unsubServices();
+    };
+  }, [user?.tenantId]);
 
-  const openCreateModal = (
-    masterId?: string,
-    date?: string,
-  ) => {
-    setInitialMasterId(masterId);
-    setInitialDate(date);
-    setShowCreateModal(true);
+  const visibleCategories = useMemo(
+    () => showInactive ? categories : categories.filter((c) => c.isActive),
+    [categories, showInactive],
+  );
+
+  const visibleServices = useMemo(
+    () => showInactive ? services : services.filter((s) => s.isActive),
+    [services, showInactive],
+  );
+
+  const handleCreateCategory = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSavingCategory(true);
+    setError('');
+    setMessage('');
+    try {
+      const createCategory = httpsCallable(getFirebaseFunctions(), 'createCategory');
+      await createCategory({ name: categoryName });
+      setCategoryName('');
+      setMessage('Категория создана');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось создать категорию');
+    } finally {
+      setSavingCategory(false);
+    }
   };
 
-  const goToday = () => {
-    setSelectedDate(todayAsDateInput());
+  const handleEditCategory = (category: Category) => {
+    setError('');
+    setMessage('');
+    setEditingCategory(category);
   };
+
+  const handleCategoryEditSaved = async () => {
+    setError('');
+    setMessage('');
+  };
+
+  const handleDeleteCategory = async (categoryIdValue: string) => {
+    if (!window.confirm('Удалить категорию навсегда? Действие необратимо.')) {
+      return;
+    }
+    setError('');
+    setMessage('');
+    try {
+      const deleteCategory = httpsCallable(getFirebaseFunctions(), 'deleteCategory');
+      await deleteCategory({ categoryId: categoryIdValue });
+      setMessage('Категория удалена');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить категорию');
+    }
+  };
+
+  const handleCreateService = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSavingService(true);
+    setError('');
+    setMessage('');
+    try {
+      const createService = httpsCallable(getFirebaseFunctions(), 'createService');
+      await createService({
+        name: serviceName,
+        categoryId,
+        durationMinutes: Number(durationMinutes),
+        bufferMinutes: Number(bufferMinutes || 0),
+        priceKzt: Number(priceKzt),
+      });
+      setServiceName('');
+      setCategoryId('');
+      setDurationMinutes('');
+      setBufferMinutes('0');
+      setPriceKzt('');
+      setMessage('Услуга создана');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось создать услугу');
+    } finally {
+      setSavingService(false);
+    }
+  };
+
+  const handleDeleteService = async (serviceId: string) => {
+    if (!window.confirm('Удалить услугу навсегда? Действие необратимо.')) {
+      return;
+    }
+    setError('');
+    setMessage('');
+    try {
+      const deleteService = httpsCallable(getFirebaseFunctions(), 'deleteService');
+      await deleteService({ serviceId });
+      setMessage('Услуга удалена');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить услугу');
+    }
+  };
+
+  const handleEdit = (service: Service) => {
+    setError('');
+    setMessage('');
+    setEditingService(service);
+  };
+
+  const handleEditSaved = async () => {
+    setError('');
+    setMessage('');
+  };
+
+  if (loading) return <p>Загрузка...</p>;
 
   return (
-    <div className="min-w-0">
-      {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#aaa6a0]">
-            Расписание
+    <div className="min-w-0 space-y-8">
+      <h1 className="text-2xl font-bold">Услуги и категории</h1>
+
+      <label className="flex items-center text-sm text-gray-700 cursor-pointer">
+        <input
+          type="checkbox"
+          className="m-0 mr-2 h-4 w-4 cursor-pointer"
+          checked={showInactive}
+          onChange={(event) => setShowInactive(event.target.checked)}
+        />
+        <span>Показать неактивные</span>
+      </label>
+
+      {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {message && <p className="rounded bg-blue-50 p-3 text-sm text-blue-700">{message}</p>}
+
+      <section className="min-w-0">
+        <h2 className="mb-4 text-xl font-semibold">Категории</h2>
+        <div className="grid min-w-0 gap-6 md:grid-cols-2">
+          <div className="min-w-0 rounded-lg bg-white p-6 shadow">
+            {visibleCategories.length === 0 ? (
+              <p className="text-sm text-gray-500">Категорий пока нет.</p>
+            ) : (
+              <ul className="divide-y">
+                {visibleCategories.map((category) => (
+                  <li key={category.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <span className="min-w-0 break-words">
+                      {category.name}
+                      {!category.isActive && (
+                        <span className="ml-2 text-xs text-red-500">(неактивна)</span>
+                      )}
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleEditCategory(category)}
+                        className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                      >
+                        Редактировать
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteCategory(category.id)}
+                        className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-
-          <h1 className="text-[28px] font-semibold tracking-[-0.035em] text-[#171717]">
-            Календарь
-          </h1>
-
-          <p className="mt-1 text-sm text-[#8b8781]">
-            {formatDate(selectedDate)}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => openCreateModal()}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#171717] px-5 text-sm font-medium text-white shadow-sm transition hover:bg-[#292929] active:scale-[0.99]"
-        >
-          <span className="text-lg leading-none">+</span>
-          Новая запись
-        </button>
-      </div>
-
-      {/* Controls */}
-      <div className="mb-5 rounded-2xl border border-[#e8e6e2] bg-white p-3 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={goToday}
-              className="h-10 rounded-xl border border-[#e5e2de] bg-[#faf9f7] px-4 text-sm font-medium text-[#494641] transition hover:bg-[#f2f0ed]"
-            >
-              Сегодня
+          <form onSubmit={handleCreateCategory} className="min-w-0 space-y-4 rounded-lg bg-white p-6 shadow">
+            <label className="block">
+              <span className="text-sm text-gray-700">Название категории *</span>
+              <input type="text" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2" />
+            </label>
+            <button type="submit" disabled={savingCategory} className="w-full rounded bg-black py-2 text-white transition-colors hover:bg-gray-800 disabled:opacity-50 sm:w-auto sm:px-4">
+              {savingCategory ? 'Создание...' : 'Создать категорию'}
             </button>
+          </form>
+        </div>
+      </section>
 
-            <div className="hidden h-6 w-px bg-[#e7e4df] sm:block" />
-
-            <div className="text-sm text-[#77736d]">
-              {appointments.length === 0
-                ? 'Нет записей'
-                : `${appointments.length} ${
-                    appointments.length === 1
-                      ? 'запись'
-                      : appointments.length < 5
-                        ? 'записи'
-                        : 'записей'
-                  }`}
-            </div>
-          </div>
-
-          <label className="flex min-w-0 items-center gap-3">
-            <span className="hidden text-xs font-medium text-[#99958f] sm:block">
-              Дата
-            </span>
-
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
-              className="h-10 w-full min-w-0 rounded-xl border border-[#e5e2de] bg-[#faf9f7] px-3 text-sm text-[#292725] outline-none transition focus:border-[#b8b3ac] focus:bg-white sm:w-[170px]"
-            />
+      <section className="min-w-0">
+        <h2 className="mb-4 text-xl font-semibold">Услуги</h2>
+        <form onSubmit={handleCreateService} className="mb-6 grid min-w-0 gap-4 rounded-lg bg-white p-6 shadow md:grid-cols-2">
+          <label className="block">
+            <span className="text-sm text-gray-700">Название *</span>
+            <input type="text" value={serviceName} onChange={(event) => setServiceName(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2" />
           </label>
-        </div>
-      </div>
+          <label className="block">
+            <span className="text-sm text-gray-700">Категория *</span>
+            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2">
+              <option value="">Выберите категорию</option>
+              {categories.filter((category) => category.isActive).map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-sm text-gray-700">Длительность (минуты) *</span>
+            <input type="number" min={1} value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2" />
+          </label>
+          <label className="block">
+            <span className="text-sm text-gray-700">Буфер (минуты)</span>
+            <input type="number" min={0} value={bufferMinutes} onChange={(event) => setBufferMinutes(event.target.value)} className="mt-1 w-full rounded border px-3 py-2" />
+          </label>
+          <label className="block">
+            <span className="text-sm text-gray-700">Цена (₸) *</span>
+            <input type="number" min={0} value={priceKzt} onChange={(event) => setPriceKzt(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2" />
+          </label>
+          <div className="flex items-end">
+            <button type="submit" disabled={savingService || categories.filter((category) => category.isActive).length === 0} className="w-full rounded bg-black py-2 text-white transition-colors hover:bg-gray-800 disabled:opacity-50 sm:w-auto sm:px-4">
+              {savingService ? 'Создание...' : 'Создать услугу'}
+            </button>
+          </div>
+        </form>
 
-      {/* Error */}
-      {error && (
-        <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {/* Calendar */}
-      <div className="min-w-0 overflow-hidden rounded-2xl border border-[#e8e6e2] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
-        {loading ? (
-          <div className="flex min-h-[420px] items-center justify-center">
-            <div className="text-sm text-[#99958f]">
-              Загрузка календаря...
-            </div>
+        {visibleServices.length === 0 ? (
+          <div className="rounded-lg bg-white p-8 text-center text-gray-500 shadow">
+            {showInactive ? 'Услуг пока нет.' : 'Активных услуг нет.'}
           </div>
         ) : (
-          <div className="min-w-0 overflow-x-auto">
-            <CalendarGrid
-              masters={masters}
-              appointments={appointments}
-              onAppointmentClick={setSelectedAppointment}
-              onEmptySlotClick={(masterId) =>
-                openCreateModal(masterId, selectedDate)
-              }
-            />
+          <div className="w-full min-w-0 overflow-x-auto rounded-lg bg-white shadow">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Название</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Категория</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Длительность</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Цена</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Статус</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Действие</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {visibleServices.map((service) => {
+                  const category = categories.find((item) => item.id === service.categoryId);
+                  return (
+                    <tr key={service.id}>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{service.name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{category?.name || service.categoryName || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{service.durationMinutes} мин</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{service.priceKzt.toLocaleString('ru-RU')} ₸</td>
+                      <td className="px-4 py-3 text-sm">{service.isActive ? 'Активна' : 'Неактивна'}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(service)}
+                            className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                          >
+                            Редактировать
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteService(service.id)}
+                            className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Modals */}
-      {user?.tenantId && (
-        <AddAppointmentModal
-          isOpen={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
-          onCreated={() => {
-            setShowCreateModal(false);
-          }}
-          tenantId={user.tenantId}
-          initialMasterId={initialMasterId}
-          initialDate={initialDate}
+      <EditServiceModal
+        service={editingService}
+        onClose={() => setEditingService(null)}
+        onSaved={handleEditSaved}
+      />
+
+      {editingCategory && (
+        <EditCategoryModal
+          categoryId={editingCategory.id}
+          initialName={editingCategory.name}
+          onClose={() => setEditingCategory(null)}
+          onSaved={handleCategoryEditSaved}
         />
       )}
-
-      <AppointmentDetailModal
-        appointment={selectedAppointment}
-        onClose={() => setSelectedAppointment(null)}
-        onUpdated={() => {
-          setSelectedAppointment(null);
-        }}
-      />
     </div>
   );
 }
-

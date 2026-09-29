@@ -9,6 +9,7 @@ import {
   type Appointment,
   type Master,
 } from '@/components/calendar-grid';
+import { CalendarList } from '@/components/calendar-list';
 import { getFirebaseDb } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -109,10 +110,7 @@ export default function CalendarPage() {
     return () => unsubAppointments();
   }, [user?.tenantId, selectedDate]);
 
-  const openCreateModal = (
-    masterId?: string,
-    date?: string,
-  ) => {
+  const openCreateModal = (masterId?: string, date?: string) => {
     setInitialMasterId(masterId);
     setInitialDate(date);
     setShowCreateModal(true);
@@ -199,7 +197,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Calendar */}
+      {/* Calendar — сетка на десктопе, список на мобильном */}
       <div className="min-w-0 overflow-hidden rounded-2xl border border-[#e8e6e2] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
         {loading ? (
           <div className="flex min-h-[420px] items-center justify-center">
@@ -208,16 +206,28 @@ export default function CalendarPage() {
             </div>
           </div>
         ) : (
-          <div className="min-w-0 overflow-x-auto">
-            <CalendarGrid
-              masters={masters}
-              appointments={appointments}
-              onAppointmentClick={setSelectedAppointment}
-              onEmptySlotClick={(masterId) =>
-                openCreateModal(masterId, selectedDate)
-              }
-            />
-          </div>
+          <>
+            {/* Desktop / tablet — сетка со скроллом */}
+            <div className="hidden overflow-x-auto md:block">
+              <CalendarGrid
+                masters={masters}
+                appointments={appointments}
+                onAppointmentClick={setSelectedAppointment}
+                onEmptySlotClick={(masterId) =>
+                  openCreateModal(masterId, selectedDate)
+                }
+              />
+            </div>
+
+            {/* Mobile — вертикальный список */}
+            <div className="md:hidden">
+              <CalendarList
+                masters={masters}
+                appointments={appointments}
+                onAppointmentClick={setSelectedAppointment}
+              />
+            </div>
+          </>
         )}
       </div>
 

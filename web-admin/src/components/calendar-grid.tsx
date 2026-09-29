@@ -63,7 +63,6 @@ export function CalendarGrid({
   );
 
   return (
-    // НЕТ overflow-auto — только min-w-[900px]. Скролл делает родитель.
     <div className="min-w-[900px] rounded-lg border border-gray-200 bg-white shadow">
       <div className="sticky top-0 z-20 flex border-b border-gray-300 bg-white">
         <div className="w-20 shrink-0 border-r border-gray-200 p-3 text-xs font-medium text-gray-500">
@@ -89,7 +88,7 @@ export function CalendarGrid({
           Нет активных мастеров.
         </p>
       ) : (
-        <div className="flex min-w-0">
+        <div className="flex">
           <div className="w-20 shrink-0">
             {rows.map((start) => (
               <div
@@ -121,8 +120,7 @@ export function CalendarGrid({
                     onClick={() => onEmptySlotClick(master.id, start)}
                     className="absolute left-0 right-0 border-b border-gray-200 bg-white text-left hover:bg-gray-50"
                     style={{
-                      top:
-                        ((start - START_MINUTES) / SLOT_STEP) * ROW_HEIGHT,
+                      top: ((start - START_MINUTES) / SLOT_STEP) * ROW_HEIGHT,
                       height: ROW_HEIGHT,
                     }}
                   />
@@ -143,8 +141,7 @@ export function CalendarGrid({
                   }
 
                   const top =
-                    ((visibleStart - START_MINUTES) / SLOT_STEP) *
-                    ROW_HEIGHT;
+                    ((visibleStart - START_MINUTES) / SLOT_STEP) * ROW_HEIGHT;
 
                   const height = Math.max(
                     ROW_HEIGHT,
