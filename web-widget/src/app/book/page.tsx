@@ -118,20 +118,62 @@ function BookingFlow() {
     } finally { setSubmitting(false); }
   };
 
-  if (status === 'loading') return <main className="book-state"><div className="book-state-card">Загрузка…</div></main>;
-  if (status === 'gone') return <main className="book-state"><div className="book-state-card"><b>Салон больше не принимает записи</b><span>Пожалуйста, свяжитесь с салоном напрямую.</span></div></main>;
-  if (status !== 'ok' || !salon) return <main className="book-state"><div className="book-state-card"><b>Салон не найден</b><span>Проверьте ссылку на запись.</span></div></main>;
+  if (status === 'loading') {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="rounded-2xl border border-line bg-card px-6 py-4 text-sm text-muted">
+          Загрузка…
+        </div>
+      </main>
+    );
+  }
 
-  if (success) return (
-    <main className="book-state">
-      <div className="book-success">
-        <div className="book-success-icon">✓</div>
-        <div className="book-kicker">BARBER CRM</div>
-        <h1>Запись отправлена</h1>
-        <p>Спасибо! Мы свяжемся с вами для подтверждения записи.</p>
-      </div>
-    </main>
-  );
+  if (status === 'gone') {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-6 text-center">
+          <b className="block text-base text-ink">Салон больше не принимает записи</b>
+          <span className="mt-2 block text-sm text-muted">
+            Пожалуйста, свяжитесь с салоном напрямую.
+          </span>
+        </div>
+      </main>
+    );
+  }
+
+  if (status !== 'ok' || !salon) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-6 text-center">
+          <b className="block text-base text-ink">Салон не найден</b>
+          <span className="mt-2 block text-sm text-muted">
+            Проверьте ссылку на запись.
+          </span>
+        </div>
+      </main>
+    );
+  }
+
+  if (success) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary text-2xl text-ink">
+            ✓
+          </div>
+          <div className="mt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+            BARBER CRM
+          </div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">
+            Запись отправлена
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-muted">
+            Отлично! Мы свяжемся с вами для подтверждения записи.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   const selectedMaster = salon.masters.find(m => m.id === masterId);
   const services = salon.services.filter(s => s.categoryId === categoryId);
@@ -141,103 +183,371 @@ function BookingFlow() {
   const steps = ['Услуги', 'Мастер', 'Время', 'Контакты'];
 
   return (
-    <main className="book-page">
-      <div className="book-shell">
-        <header className="book-header">
+    <main className="min-h-screen bg-surface px-4 py-6 pb-28">
+      <div className="mx-auto w-full max-w-md">
+        {/* Header */}
+        <header className="mb-6 flex items-start justify-between gap-3">
           <div>
-            <div className="book-kicker">{salon.tenant.city}</div>
-            <h1>{salon.tenant.name}</h1>
-            <p>Онлайн-запись</p>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+              {salon.tenant.city || 'Онлайн-запись'}
+            </div>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
+              {salon.tenant.name}
+            </h1>
+            <p className="mt-1 text-xs text-muted">Онлайн-запись</p>
           </div>
-          <div className="book-logo">✦</div>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-lg font-bold text-ink">
+            ✂
+          </div>
         </header>
 
-        <div className="book-progress">
-          {steps.map((label, i) => (
-            <div key={label} className={`book-progress-item ${step === i+1 ? 'active' : ''} ${step > i+1 ? 'done' : ''}`}>
-              <span>{i+1}</span><small>{label}</small>
-            </div>
-          ))}
+        {/* Progress */}
+        <div className="mb-6 flex items-center gap-1.5">
+          {steps.map((label, i) => {
+            const active = step === i + 1;
+            const done = step > i + 1;
+            return (
+              <div key={label} className="flex flex-1 flex-col items-center gap-1.5">
+                <div
+                  className={[
+                    'flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition',
+                    active ? 'bg-primary text-ink' : done ? 'bg-ink text-white' : 'bg-white text-muted border border-line',
+                  ].join(' ')}
+                >
+                  {done ? '✓' : i + 1}
+                </div>
+                <small className={`text-[10px] font-medium ${active ? 'text-ink' : 'text-muted'}`}>
+                  {label}
+                </small>
+              </div>
+            );
+          })}
         </div>
 
-        {error && <div className="book-error"><b>Не получилось</b><span>{error}</span></div>}
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+            <b className="block font-semibold">Не получилось</b>
+            <span className="mt-0.5 block">{error}</span>
+          </div>
+        )}
 
+        {/* STEP 1 — SERVICES */}
         {step === 1 && (
-          <section className="book-section">
-            <div className="book-section-head">
-              <div><span>ШАГ 1</span><h2>Выберите услуги</h2><p>Можно выбрать несколько услуг</p></div>
-              {serviceIds.length > 0 && <strong>{money(totalPrice)}</strong>}
+          <section>
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                  Шаг 1
+                </div>
+                <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">
+                  Выберите услуги
+                </h2>
+                <p className="mt-1 text-xs text-muted">Можно несколько</p>
+              </div>
+              {serviceIds.length > 0 && (
+                <strong className="text-base font-semibold text-ink">{money(totalPrice)}</strong>
+              )}
             </div>
-            <div className="book-chips">
+
+            <div className="mb-3 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
               {salon.categories.map(c => (
-                <button key={c.id} type="button" onClick={() => setCategoryId(c.id)} className={categoryId === c.id ? 'selected' : ''}>{c.name}</button>
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCategoryId(c.id)}
+                  className={[
+                    'shrink-0 rounded-full px-4 py-2 text-xs font-medium transition',
+                    categoryId === c.id
+                      ? 'bg-ink text-white'
+                      : 'border border-line bg-white text-muted hover:border-ink hover:text-ink',
+                  ].join(' ')}
+                >
+                  {c.name}
+                </button>
               ))}
             </div>
-            <div className="book-list">
+
+            <div className="space-y-2">
               {services.map(s => {
                 const checked = serviceIds.includes(s.id);
-                return <button key={s.id} type="button" onClick={() => toggleService(s.id)} className={`book-service ${checked ? 'selected' : ''}`}>
-                  <span className={`book-check ${checked ? 'checked' : ''}`}>{checked ? '✓' : ''}</span>
-                  <span className="book-service-main"><b>{s.name}</b><small>{s.durationMinutes} мин.</small></span>
-                  <strong>{money(s.priceKzt)}</strong>
-                </button>;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => toggleService(s.id)}
+                    className={[
+                      'flex w-full items-center gap-3 rounded-2xl border bg-card p-4 text-left transition',
+                      checked ? 'border-primary shadow-sm' : 'border-line hover:border-ink/30',
+                    ].join(' ')}
+                  >
+                    <span
+                      className={[
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition',
+                        checked ? 'border-primary bg-primary text-ink' : 'border-line bg-white text-transparent',
+                      ].join(' ')}
+                    >
+                      ✓
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <b className="block truncate text-sm font-semibold text-ink">{s.name}</b>
+                      <small className="mt-0.5 block text-xs text-muted">
+                        {s.durationMinutes} мин
+                      </small>
+                    </span>
+                    <strong className="shrink-0 text-sm font-semibold text-ink">
+                      {money(s.priceKzt)}
+                    </strong>
+                  </button>
+                );
               })}
-              {!services.length && <div className="book-empty-inline">В этой категории пока нет услуг.</div>}
+              {!services.length && (
+                <div className="rounded-2xl border border-line bg-card p-6 text-center text-sm text-muted">
+                  В этой категории пока нет услуг.
+                </div>
+              )}
             </div>
           </section>
         )}
 
+        {/* STEP 2 — MASTERS */}
         {step === 2 && (
-          <section className="book-section">
-            <button type="button" className="book-back" onClick={() => setStep(1)}>← Назад</button>
-            <div className="book-section-head"><div><span>ШАГ 2</span><h2>Выберите мастера</h2><p>Кто будет выполнять выбранные услуги</p></div></div>
-            <div className="book-master-list">
-              {masters.map(m => <button key={m.id} type="button" className="book-master" onClick={() => { setMasterId(m.id); setStep(3); setError(''); }}>
-                {m.photoUrl ? <img src={m.photoUrl} alt="" /> : <span className="book-master-avatar">{m.name.slice(0,1)}</span>}
-                <span><b>{m.name}</b><small>{rating(m.rating || 0, m.ratingCount || 0)}</small></span><i>›</i>
-              </button>)}
-              {!masters.length && <div className="book-empty-inline">Нет доступных мастеров для выбранных услуг.</div>}
+          <section>
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="mb-4 text-xs font-medium text-muted transition hover:text-ink"
+            >
+              ← Назад
+            </button>
+            <div className="mb-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                Шаг 2
+              </div>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">
+                Выберите мастера
+              </h2>
+              <p className="mt-1 text-xs text-muted">
+                Кто будет выполнять выбранные услуги
+              </p>
+            </div>
+            <div className="space-y-2">
+              {masters.map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => { setMasterId(m.id); setStep(3); setError(''); }}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-line bg-card p-4 text-left transition hover:border-ink/30"
+                >
+                  {m.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={m.photoUrl}
+                      alt=""
+                      className="h-12 w-12 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface text-base font-semibold text-muted">
+                      {m.name.slice(0, 1)}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <b className="block truncate text-sm font-semibold text-ink">{m.name}</b>
+                    <small className="mt-0.5 block text-xs text-muted">
+                      {rating(m.rating || 0, m.ratingCount || 0)}
+                    </small>
+                  </span>
+                  <i className="shrink-0 text-muted not-italic">→</i>
+                </button>
+              ))}
+              {!masters.length && (
+                <div className="rounded-2xl border border-line bg-card p-6 text-center text-sm text-muted">
+                  Мет достурных мастеров для выбранных услуг.
+                </div>
+              )}
             </div>
           </section>
         )}
 
+        {/* STEP 3 — DATE & TIME */}
         {step === 3 && (
-          <section className="book-section">
-            <button type="button" className="book-back" onClick={() => setStep(2)}>← Назад</button>
-            <div className="book-section-head"><div><span>ШАГ 3</span><h2>Дата и время</h2><p>{selectedMaster?.name || 'Выберите удобное время'}</p></div></div>
-            <label className="book-date"><span>Дата записи</span><input type="date" min={todayString} max={maxDate} value={date} onChange={e => { setDate(e.target.value); setSlots([]); }} /></label>
-            {loadingSlots ? <div className="book-loading">Загружаем свободное время…</div> : date && <div className="book-slots">
-              {slots.map(s => <button key={s.start} type="button" onClick={() => { setSlot(s); setStep(4); setError(''); }}>{s.time}</button>)}
-              {!slots.length && <div className="book-empty-inline">Свободного времени нет.</div>}
-            </div>}
+          <section>
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="mb-4 text-xs font-medium text-muted transition hover:text-ink"
+            >
+              ← Назад
+            </button>
+            <div className="mb-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                Шаг 3
+              </div>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">
+                Дата и время
+              </h2>
+              <p className="mt-1 text-xs text-muted">
+                {selectedMaster?.name || 'Выберите удобное время'}
+              </p>
+            </div>
+
+            <label className="mb-4 block">
+              <span className="mb-2 block text-xs font-medium text-muted">Дата записи</span>
+              <input
+                type="date"
+                min={todayString}
+                max={maxDate}
+                value={date}
+                onChange={e => { setDate(e.target.value); setSlots([]); }}
+                className="h-12 w-full rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+              />
+            </label>
+
+            {loadingSlots ? (
+              <div className="rounded-2xl border border-line bg-card p-6 text-center text-sm text-muted">
+                Загружаем свободное время…
+              </div>
+            ) : date ? (
+              <div className="grid grid-cols-3 gap-2">
+                {slots.map(s => (
+                  <button
+                    key={s.start}
+                    type="button"
+                    onClick={() => { setSlot(s); setStep(4); setError(''); }}
+                    className="rounded-xl border border-line bg-card px-3 py-3 text-sm font-medium text-ink transition hover:border-primary hover:bg-primary/10"
+                  >
+                    {s.time}
+                  </button>
+                ))}
+                {!slots.length && (
+                  <div className="col-span-3 rounded-2xl border border-line bg-card p-6 text-center text-sm text-muted">
+                    Свободного времени нет.
+                  </div>
+                )}
+              </div>
+            ) : null}
           </section>
         )}
 
+        {/* STEP 4 — CONTACTS */}
         {step === 4 && slot && (
-          <section className="book-section">
-            <button type="button" className="book-back" onClick={() => setStep(3)}>← Назад</button>
-            <div className="book-section-head"><div><span>ШАГ 4</span><h2>Ваши контакты</h2><p>Оставьте данные для подтверждения записи</p></div></div>
-            <div className="book-summary">
-              <div><span>Услуги</span><b>{selectedServices.map(s => s.name).join(', ')}</b></div>
-              <div><span>Мастер</span><b>{selectedMaster?.name}</b></div>
-              <div><span>Дата и время</span><b>{dateRu(date)}, {slot.time}</b></div>
-              <div><span>Стоимость</span><b>{money(totalPrice)}</b></div>
+          <section>
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              className="mb-4 text-xs font-medium text-muted transition hover:text-ink"
+            >
+              ← Назад
+            </button>
+            <div className="mb-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                Шаг 4
+              </div>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">
+                Ваши контакты
+              </h2>
+              <p className="mt-1 text-xs text-muted">
+                Укажите данные для подтверждения записи
+              </p>
             </div>
-            <form onSubmit={submit} className="book-form">
-              <label><span>Имя</span><input required value={name} onChange={e => setName(e.target.value)} placeholder="Как к вам обращаться?" /></label>
-              <label><span>Телефон</span><input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 ___ ___ __ __" /></label>
-              <label className="book-consent"><input required type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /><span>Согласен на обработку персональных данных</span></label>
-              <button className="book-primary" type="submit" disabled={submitting || !consent}>{submitting ? 'Отправляем…' : 'Подтвердить запись'}</button>
+
+            <div className="mb-5 space-y-2 rounded-2xl border border-line bg-card p-4 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="shrink-0 text-xs text-muted">Услуги</span>
+                <b className="text-right font-medium text-ink">
+                  {selectedServices.map(s => s.name).join(', ')}
+                </b>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="shrink-0 text-xs text-muted">Мастер</span>
+                <b className="text-right font-medium text-ink">{selectedMaster?.name}</b>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="shrink-0 text-xs text-muted">Дата и время</span>
+                <b className="text-right font-medium text-ink">{dateRu(date)}, {slot.time}</b>
+              </div>
+              <div className="flex justify-between gap-4 border-t border-line pt-2">
+                <span className="shrink-0 text-xs text-muted">Стоимость</span>
+                <b className="text-right font-semibold text-ink">{money(totalPrice)}</b>
+              </div>
+            </div>
+
+            <form onSubmit={submit} className="space-y-4">
+              <label className="block">
+                <span className="mb-2 block text-xs font-medium text-muted">Имя</span>
+                <input
+                  required
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Как к вам обращаться?"
+                  className="h-12 w-full rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-xs font-medium text-muted">Телефон</span>
+                <input
+                  required
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="+7 ___ ___ __ __"
+                  className="h-12 w-full rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-card p-4">
+                <input
+                  required
+                  type="checkbox"
+                  checked={consent}
+                  onChange={e => setConsent(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#F4C842]"
+                />
+                <span className="text-xs leading-5 text-muted">
+                  Согласен на обработку персональных данных
+                </span>
+              </label>
+              <button
+                type="submit"
+                disabled={submitting || !consent}
+                className="h-12 w-full rounded-xl bg-primary text-sm font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? 'Отправляем…' : 'Подтвердить запись'}
+              </button>
             </form>
           </section>
         )}
       </div>
 
-      {step === 1 && <div className="book-bottom"><button type="button" disabled={!serviceIds.length} onClick={() => setStep(2)}>Продолжить <span>→</span></button></div>}
+      {/* Sticky bottom CTA on step 1 */}
+      {step === 1 && (
+        <div className="fixed inset-x-0 bottom-0 border-t border-line bg-card/95 px-4 py-3 backdrop-blur">
+          <div className="mx-auto w-full max-w-md">
+            <button
+              type="button"
+              disabled={!serviceIds.length}
+              onClick={() => setStep(2)}
+              className="h-12 w-full rounded-xl bg-primary text-sm font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Продолжить →
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
 export default function BookPage() {
-  return <Suspense fallback={<main className="book-state"><div className="book-state-card">Загрузка…</div></main>}><BookingFlow /></Suspense>;
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center px-4">
+          <div className="rounded-2xl border border-line bg-card px-6 py-4 text-sm text-muted">
+            Загрузка…
+          </div>
+        </main>
+      }
+    >
+      <BookingFlow />
+    </Suspense>
+  );
 }

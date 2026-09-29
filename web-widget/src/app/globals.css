@@ -567,5 +567,3 @@ button, input { font: inherit; }
   .master-status { align-self: flex-start; }
   .master-login-card { padding: 24px 19px; }
 }
-
-@import './book/book-design.css';
