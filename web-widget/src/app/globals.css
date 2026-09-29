@@ -35,6 +35,10 @@ html, body {
 
 button, input { font: inherit; }
 
+/* ============================
+   MASTER WIDGET (кабинет мастера)
+   ============================ */
+
 .master-page {
   min-height: 100vh;
   background:
@@ -566,4 +570,32 @@ button, input { font: inherit; }
   .master-appointment-top { align-items: flex-start; flex-direction: column; gap: 5px; }
   .master-status { align-self: flex-start; }
   .master-login-card { padding: 24px 19px; }
+}
+
+/* ============================
+   Skeleton shimmer
+   ============================ */
+
+@keyframes widget-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.sk {
+  background: linear-gradient(
+    90deg,
+    #EEEEEC 0%,
+    #F8F8F6 50%,
+    #EEEEEC 100%
+  );
+  background-size: 200% 100%;
+  animation: widget-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+    background: #EEEEEC;
+  }
 }

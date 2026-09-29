@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
+import { BookSkeleton } from '@/components/book-skeleton';
 
 type Service = { id: string; name: string; categoryId: string; durationMinutes: number; priceKzt: number };
 type Master = { id: string; name: string; photoUrl: string; rating: number; ratingCount: number; serviceIds: string[] };
@@ -192,13 +193,7 @@ function BookingFlow() {
   };
 
   if (status === 'loading') {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="rounded-2xl border border-line bg-card px-6 py-4 text-base text-muted">
-          Загрузка…
-        </div>
-      </main>
-    );
+    return <BookSkeleton />;
   }
 
   if (status === 'gone') {
@@ -493,8 +488,10 @@ function BookingFlow() {
             </label>
 
             {loadingSlots ? (
-              <div className="rounded-2xl border border-line bg-card p-6 text-center text-base text-muted">
-                Загружаем свободное время…
+              <div className="grid grid-cols-3 gap-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+                  <div key={i} className="sk h-[52px] rounded-xl" />
+                ))}
               </div>
             ) : date ? (
               <div className="grid grid-cols-3 gap-2">
@@ -630,15 +627,7 @@ function BookingFlow() {
 
 export default function BookPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center px-4">
-          <div className="rounded-2xl border border-line bg-card px-6 py-4 text-base text-muted">
-            Загрузка…
-          </div>
-        </main>
-      }
-    >
+    <Suspense fallback={<BookSkeleton />}>
       <BookingFlow />
     </Suspense>
   );
