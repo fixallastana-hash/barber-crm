@@ -1,5 +1,3 @@
-'use client';
-
 const WHATSAPP_URL = 'https://wa.me/77079632034';
 
 export function WidgetFooter() {
@@ -9,12 +7,10 @@ export function WidgetFooter() {
         href={WHATSAPP_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-[11px] text-[#7A7A7A] transition-colors duration-150 hover:text-[#1A1A1A]"
+        className="text-xs text-muted transition-colors hover:text-ink"
       >
         Сотрудничество
       </a>
     </footer>
   );
 }
-
-export default WidgetFooter;

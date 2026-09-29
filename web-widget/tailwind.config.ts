@@ -1,32 +1,25 @@
 import type { Config } from 'tailwindcss';
+import defaultTheme from 'tailwindcss/defaultTheme';
 
 const config: Config = {
-  content: [
-    './src/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
       colors: {
-        widget: {
-          primary: '#F4C842',
-          black: '#1A1A1A',
-          surface: '#FAFAFA',
-          border: '#E5E5E5',
-          muted: '#7A7A7A',
-          success: '#15803D',
-          danger: '#DC2626',
+        primary: {
+          DEFAULT: 'var(--widget-primary)',
+          hover: 'var(--widget-primary-hover)',
         },
+        ink: 'var(--widget-ink)',
+        surface: 'var(--widget-surface)',
+        card: 'var(--widget-card)',
+        line: 'var(--widget-line)',
+        muted: 'var(--widget-muted)',
+        success: 'var(--widget-success)',
+        danger: 'var(--widget-danger)',
       },
       fontFamily: {
-        sans: [
-          'Inter',
-          'ui-sans-serif',
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'sans-serif',
-        ],
+        sans: ['var(--font-inter)', ...defaultTheme.fontFamily.sans],
       },
     },
   },
