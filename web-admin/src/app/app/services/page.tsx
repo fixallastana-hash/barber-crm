@@ -32,6 +32,11 @@ export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(false);
+  const [showInactiveCategories, setShowInactiveCategories] = useState(false);
+
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showServiceForm, setShowServiceForm] = useState(false);
+
   const [categoryName, setCategoryName] = useState('');
   const [serviceName, setServiceName] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -85,8 +90,8 @@ export default function ServicesPage() {
   }, [user?.tenantId]);
 
   const visibleCategories = useMemo(
-    () => showInactive ? categories : categories.filter((c) => c.isActive),
-    [categories, showInactive],
+    () => showInactiveCategories ? categories : categories.filter((c) => c.isActive),
+    [categories, showInactiveCategories],
   );
 
   const visibleServices = useMemo(
@@ -103,6 +108,7 @@ export default function ServicesPage() {
       const createCategory = httpsCallable(getFirebaseFunctions(), 'createCategory');
       await createCategory({ name: categoryName });
       setCategoryName('');
+      setShowCategoryForm(false);
       setMessage('Категория создана');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать категорию');
@@ -156,6 +162,7 @@ export default function ServicesPage() {
       setDurationMinutes('');
       setBufferMinutes('0');
       setPriceKzt('');
+      setShowServiceForm(false);
       setMessage('Услуга создана');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать услугу');
@@ -193,105 +200,226 @@ export default function ServicesPage() {
   if (loading) return <p>Загрузка...</p>;
 
   return (
-    <div className="min-w-0 space-y-8">
+    <div className="min-w-0 space-y-6">
       <h1 className="text-2xl font-bold">Услуги и категории</h1>
-
-      <label className="flex items-center text-sm text-gray-700 cursor-pointer">
-        <input
-          type="checkbox"
-          className="m-0 mr-2 h-4 w-4 cursor-pointer"
-          checked={showInactive}
-          onChange={(event) => setShowInactive(event.target.checked)}
-        />
-        <span>Показать неактивные</span>
-      </label>
 
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {message && <p className="rounded bg-blue-50 p-3 text-sm text-blue-700">{message}</p>}
 
+      {/* ===== КАТЕГОРИИ ===== */}
       <section className="min-w-0">
-        <h2 className="mb-4 text-xl font-semibold">Категории</h2>
-        <div className="grid min-w-0 gap-6 md:grid-cols-2">
-          <div className="min-w-0 rounded-lg bg-white p-6 shadow">
-            {visibleCategories.length === 0 ? (
-              <p className="text-sm text-gray-500">Категорий пока нет.</p>
-            ) : (
-              <ul className="divide-y">
-                {visibleCategories.map((category) => (
-                  <li key={category.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <span className="min-w-0 break-words">
-                      {category.name}
-                      {!category.isActive && (
-                        <span className="ml-2 text-xs text-red-500">(неактивна)</span>
-                      )}
-                    </span>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEditCategory(category)}
-                        className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
-                      >
-                        Редактировать
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteCategory(category.id)}
-                        className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
-                      >
-                        Удалить
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <form onSubmit={handleCreateCategory} className="min-w-0 space-y-4 rounded-lg bg-white p-6 shadow">
-            <label className="block">
-              <span className="text-sm text-gray-700">Название категории *</span>
-              <input type="text" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2" />
-            </label>
-            <button type="submit" disabled={savingCategory} className="w-full rounded bg-black py-2 text-white transition-colors hover:bg-gray-800 disabled:opacity-50 sm:w-auto sm:px-4">
-              {savingCategory ? 'Создание...' : 'Создать категорию'}
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Категории</h2>
+          <button
+            type="button"
+            onClick={() => setShowCategoryForm((v) => !v)}
+            className="rounded-md border border-black bg-white px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-black hover:text-white"
+          >
+            {showCategoryForm ? '× Отмена' : '+ Добавить'}
+          </button>
+        </div>
+
+        {showCategoryForm && (
+          <form
+            onSubmit={handleCreateCategory}
+            className="mb-3 flex gap-2 rounded-lg bg-white p-3 shadow"
+          >
+            <input
+              type="text"
+              value={categoryName}
+              onChange={(event) => setCategoryName(event.target.value)}
+              required
+              placeholder="Название категории"
+              className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-black"
+            />
+            <button
+              type="submit"
+              disabled={savingCategory}
+              className="shrink-0 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
+            >
+              {savingCategory ? '...' : 'Создать'}
             </button>
           </form>
+        )}
+
+        <div className="rounded-lg bg-white p-1 shadow">
+          {visibleCategories.length === 0 ? (
+            <p className="p-4 text-sm text-gray-500">Категорий пока нет.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {visibleCategories.map((category) => (
+                <li
+                  key={category.id}
+                  className="flex items-center gap-2 py-2 pl-3 pr-2"
+                >
+                  <span className="min-w-0 flex-1 break-words text-sm font-medium text-[#171717]">
+                    {category.name}
+                    {!category.isActive && (
+                      <span className="ml-2 text-xs font-normal text-red-500">(неактивна)</span>
+                    )}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => handleEditCategory(category)}
+                    aria-label="Редактировать категорию"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 transition hover:bg-gray-100 hover:text-black"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                    </svg>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteCategory(category.id)}
+                    aria-label="Удалить категорию"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 transition hover:bg-red-50 hover:text-red-600"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    </svg>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
+
+        <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+            <input
+              type="checkbox"
+              className="peer absolute h-4 w-4 cursor-pointer appearance-none rounded border border-gray-300 bg-white transition checked:border-black checked:bg-black"
+              checked={showInactiveCategories}
+              onChange={(event) => setShowInactiveCategories(event.target.checked)}
+            />
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="pointer-events-none relative text-white opacity-0 peer-checked:opacity-100"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </span>
+          Показать неактивные
+        </label>
       </section>
 
+      {/* ===== УСЛУГИ ===== */}
       <section className="min-w-0">
-        <h2 className="mb-4 text-xl font-semibold">Услуги</h2>
-        <form onSubmit={handleCreateService} className="mb-6 grid min-w-0 gap-4 rounded-lg bg-white p-6 shadow md:grid-cols-2">
-          <label className="block">
-            <span className="text-sm text-gray-700">Название *</span>
-            <input type="text" value={serviceName} onChange={(event) => setServiceName(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2" />
-          </label>
-          <label className="block">
-            <span className="text-sm text-gray-700">Категория *</span>
-            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2">
-              <option value="">Выберите категорию</option>
-              {categories.filter((category) => category.isActive).map((category) => (
-                <option key={category.id} value={category.id}>{category.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-sm text-gray-700">Длительность (минуты) *</span>
-            <input type="number" min={1} value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2" />
-          </label>
-          <label className="block">
-            <span className="text-sm text-gray-700">Буфер (минуты)</span>
-            <input type="number" min={0} value={bufferMinutes} onChange={(event) => setBufferMinutes(event.target.value)} className="mt-1 w-full rounded border px-3 py-2" />
-          </label>
-          <label className="block">
-            <span className="text-sm text-gray-700">Цена (₸) *</span>
-            <input type="number" min={0} value={priceKzt} onChange={(event) => setPriceKzt(event.target.value)} required className="mt-1 w-full rounded border px-3 py-2" />
-          </label>
-          <div className="flex items-end">
-            <button type="submit" disabled={savingService || categories.filter((category) => category.isActive).length === 0} className="w-full rounded bg-black py-2 text-white transition-colors hover:bg-gray-800 disabled:opacity-50 sm:w-auto sm:px-4">
-              {savingService ? 'Создание...' : 'Создать услугу'}
-            </button>
-          </div>
-        </form>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Услуги</h2>
+          <button
+            type="button"
+            onClick={() => setShowServiceForm((v) => !v)}
+            disabled={categories.filter((c) => c.isActive).length === 0}
+            className="rounded-md border border-black bg-white px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {showServiceForm ? '× Отмена' : '+ Добавить'}
+          </button>
+        </div>
+
+        {showServiceForm && (
+          <form
+            onSubmit={handleCreateService}
+            className="mb-3 grid gap-3 rounded-lg bg-white p-4 shadow md:grid-cols-2"
+          >
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Название *</span>
+              <input
+                type="text"
+                value={serviceName}
+                onChange={(event) => setServiceName(event.target.value)}
+                required
+                placeholder="Например, Стрижка"
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none transition focus:border-black"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Категория *</span>
+              <select
+                value={categoryId}
+                onChange={(event) => setCategoryId(event.target.value)}
+                required
+                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-black"
+              >
+                <option value="">Выберите категорию</option>
+                {categories.filter((c) => c.isActive).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Длительность (мин) *</span>
+              <input
+                type="number"
+                min={1}
+                value={durationMinutes}
+                onChange={(event) => setDurationMinutes(event.target.value)}
+                required
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none transition focus:border-black"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Буфер (мин)</span>
+              <input
+                type="number"
+                min={0}
+                value={bufferMinutes}
+                onChange={(event) => setBufferMinutes(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none transition focus:border-black"
+              />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="text-xs font-medium text-gray-600">Цена (₸) *</span>
+              <input
+                type="number"
+                min={0}
+                value={priceKzt}
+                onChange={(event) => setPriceKzt(event.target.value)}
+                required
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none transition focus:border-black"
+              />
+            </label>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={savingService}
+                className="w-full rounded-lg bg-black py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
+              >
+                {savingService ? 'Создание...' : 'Создать услугу'}
+              </button>
+            </div>
+          </form>
+        )}
 
         {visibleServices.length === 0 ? (
           <div className="rounded-lg bg-white p-8 text-center text-gray-500 shadow">
@@ -299,44 +427,58 @@ export default function ServicesPage() {
           </div>
         ) : (
           <>
-            {/* Desktop — таблица со скроллом внутри рамки */}
             <div className="hidden w-full min-w-0 overflow-x-auto rounded-lg bg-white shadow md:block">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Название</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Категория</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Длительность</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Цена</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Статус</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Действие</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Название</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Категория</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Длительность</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Цена</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Статус</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Действия</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {visibleServices.map((service) => {
                     const category = categories.find((item) => item.id === service.categoryId);
                     return (
-                      <tr key={service.id}>
+                      <tr key={service.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{service.name}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{category?.name || service.categoryName || '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{service.durationMinutes} мин</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{service.priceKzt.toLocaleString('ru-RU')} ₸</td>
-                        <td className="px-4 py-3 text-sm">{service.isActive ? 'Активна' : 'Неактивна'}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <div className="flex flex-wrap gap-2">
+                        <td className="px-4 py-3">
+                          {service.isActive ? (
+                            <span className="inline-flex rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">Активна</span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">Неактивна</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1">
                             <button
                               type="button"
                               onClick={() => handleEdit(service)}
-                              className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                              aria-label="Редактировать"
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-gray-100 hover:text-black"
                             >
-                              Редактировать
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                              </svg>
                             </button>
                             <button
                               type="button"
                               onClick={() => void handleDeleteService(service.id)}
-                              className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                              aria-label="Удалить"
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-red-50 hover:text-red-600"
                             >
-                              Удалить
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              </svg>
                             </button>
                           </div>
                         </td>
@@ -347,65 +489,57 @@ export default function ServicesPage() {
               </table>
             </div>
 
-            {/* Mobile — вертикальные карточки */}
-            <div className="space-y-3 md:hidden">
+            <div className="space-y-2 md:hidden">
               {visibleServices.map((service) => {
                 const category = categories.find((item) => item.id === service.categoryId);
                 return (
-                  <div
-                    key={service.id}
-                    className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-3">
+                  <div key={service.id} className="rounded-lg bg-white p-3 shadow">
+                    <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-[#171717] break-words">
+                        <p className="break-words text-sm font-semibold text-[#171717]">
                           {service.name}
                         </p>
-                        <p className="mt-1 text-xs text-gray-500 break-words">
+                        <p className="mt-0.5 break-words text-xs text-gray-500">
                           {category?.name || service.categoryName || '—'}
                         </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
+                          <span>{service.durationMinutes} мин</span>
+                          <span className="font-semibold text-[#171717]">
+                            {service.priceKzt.toLocaleString('ru-RU')} ₸
+                          </span>
+                          {!service.isActive && (
+                            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700">
+                              Неактивна
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {service.isActive ? (
-                        <span className="shrink-0 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700">
-                          Активна
-                        </span>
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700">
-                          Неактивна
-                        </span>
-                      )}
-                    </div>
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-[#faf9f7] px-3 py-2 text-sm">
-                      <div>
-                        <p className="text-[11px] text-gray-500">Длительность</p>
-                        <p className="mt-0.5 font-semibold text-[#171717]">
-                          {service.durationMinutes} мин
-                        </p>
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(service)}
+                          aria-label="Редактировать"
+                          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-gray-100 hover:text-black"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteService(service.id)}
+                          aria-label="Удалить"
+                          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-red-50 hover:text-red-600"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          </svg>
+                        </button>
                       </div>
-                      <div>
-                        <p className="text-[11px] text-gray-500">Цена</p>
-                        <p className="mt-0.5 font-semibold text-[#171717]">
-                          {service.priceKzt.toLocaleString('ru-RU')} ₸
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(service)}
-                        className="flex-1 rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
-                      >
-                        Редактировать
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteService(service.id)}
-                        className="flex-1 rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
-                      >
-                        Удалить
-                      </button>
                     </div>
                   </div>
                 );
@@ -413,6 +547,31 @@ export default function ServicesPage() {
             </div>
           </>
         )}
+
+        <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+            <input
+              type="checkbox"
+              className="peer absolute h-4 w-4 cursor-pointer appearance-none rounded border border-gray-300 bg-white transition checked:border-black checked:bg-black"
+              checked={showInactive}
+              onChange={(event) => setShowInactive(event.target.checked)}
+            />
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="pointer-events-none relative text-white opacity-0 peer-checked:opacity-100"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </span>
+          Показать неактивные
+        </label>
       </section>
 
       <EditServiceModal
