@@ -33,3 +33,4 @@ web-admin-backup/
 # Next.js build artifacts
 out/
 .next/
+*-before-*.txt
