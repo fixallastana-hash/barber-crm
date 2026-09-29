@@ -298,52 +298,120 @@ export default function ServicesPage() {
             {showInactive ? 'Услуг пока нет.' : 'Активных услуг нет.'}
           </div>
         ) : (
-          <div className="w-full min-w-0 overflow-x-auto rounded-lg bg-white shadow">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Название</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Категория</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Длительность</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Цена</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Статус</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Действие</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {visibleServices.map((service) => {
-                  const category = categories.find((item) => item.id === service.categoryId);
-                  return (
-                    <tr key={service.id}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{service.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{category?.name || service.categoryName || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{service.durationMinutes} мин</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{service.priceKzt.toLocaleString('ru-RU')} ₸</td>
-                      <td className="px-4 py-3 text-sm">{service.isActive ? 'Активна' : 'Неактивна'}</td>
-                      <td className="px-4 py-3 text-sm">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(service)}
-                            className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
-                          >
-                            Редактировать
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteService(service.id)}
-                            className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
-                          >
-                            Удалить
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Desktop — таблица со скроллом внутри рамки */}
+            <div className="hidden w-full min-w-0 overflow-x-auto rounded-lg bg-white shadow md:block">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Название</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Категория</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Длительность</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Цена</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Статус</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Действие</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {visibleServices.map((service) => {
+                    const category = categories.find((item) => item.id === service.categoryId);
+                    return (
+                      <tr key={service.id}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{service.name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{category?.name || service.categoryName || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{service.durationMinutes} мин</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{service.priceKzt.toLocaleString('ru-RU')} ₸</td>
+                        <td className="px-4 py-3 text-sm">{service.isActive ? 'Активна' : 'Неактивна'}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(service)}
+                              className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                            >
+                              Редактировать
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteService(service.id)}
+                              className="rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile — вертикальные карточки */}
+            <div className="space-y-3 md:hidden">
+              {visibleServices.map((service) => {
+                const category = categories.find((item) => item.id === service.categoryId);
+                return (
+                  <div
+                    key={service.id}
+                    className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-[#171717] break-words">
+                          {service.name}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 break-words">
+                          {category?.name || service.categoryName || '—'}
+                        </p>
+                      </div>
+                      {service.isActive ? (
+                        <span className="shrink-0 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700">
+                          Активна
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700">
+                          Неактивна
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-[#faf9f7] px-3 py-2 text-sm">
+                      <div>
+                        <p className="text-[11px] text-gray-500">Длительность</p>
+                        <p className="mt-0.5 font-semibold text-[#171717]">
+                          {service.durationMinutes} мин
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-gray-500">Цена</p>
+                        <p className="mt-0.5 font-semibold text-[#171717]">
+                          {service.priceKzt.toLocaleString('ru-RU')} ₸
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(service)}
+                        className="flex-1 rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                      >
+                        Редактировать
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteService(service.id)}
+                        className="flex-1 rounded-md border border-black bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </section>
 
