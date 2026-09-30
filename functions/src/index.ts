@@ -197,6 +197,21 @@ export const deactivateBranch = onCall(async (request) => {
   return { success: true };
 });
 
+export const activateBranch = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const branchId = data.branchId;
+  if (!branchId) throw new HttpsError('invalid-argument', 'branchId is required');
+
+  await db.doc('tenants/' + tenantId + '/branches/' + branchId).update({
+    isActive: true,
+  });
+
+  return { success: true };
+});
+
 export const createMaster = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -409,6 +424,21 @@ export const deactivateMaster = onCall(async (request) => {
   return { success: true };
 });
 
+export const activateMaster = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const masterId = data.masterId;
+  if (!masterId) throw new HttpsError('invalid-argument', 'masterId is required');
+
+  await db.doc('tenants/' + tenantId + '/masters/' + masterId).update({
+    isActive: true,
+  });
+
+  return { success: true };
+});
+
 export const deleteService = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -524,6 +554,22 @@ export const deactivateCategory = onCall(async (request) => {
   return { success: true };
 });
 
+export const activateCategory = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const categoryId = data.categoryId;
+  if (!categoryId) throw new HttpsError('invalid-argument', 'categoryId is required');
+
+  await db.doc('tenants/' + tenantId + '/categories/' + categoryId).update({
+    isActive: true,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { success: true };
+});
+
 export const createCategory = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -609,6 +655,22 @@ export const deactivateService = onCall(async (request) => {
 
   await db.doc('tenants/' + tenantId + '/services/' + serviceId).update({
     isActive: false,
+  });
+
+  return { success: true };
+});
+
+export const activateService = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const serviceId = data.serviceId;
+  if (!serviceId) throw new HttpsError('invalid-argument', 'serviceId is required');
+
+  await db.doc('tenants/' + tenantId + '/services/' + serviceId).update({
+    isActive: true,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   return { success: true };
