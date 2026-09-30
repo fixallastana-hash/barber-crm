@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
+import { ReviewSkeleton } from '@/components/review-skeleton';
 
 function StarIcon({ filled }: { filled: boolean }) {
   return (
@@ -161,15 +162,7 @@ function ReviewForm() {
 
 export default function ReviewPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center bg-surface px-4">
-          <div className="rounded-2xl border border-line bg-card px-6 py-4 text-base text-muted">
-            Загрузка…
-          </div>
-        </main>
-      }
-    >
+    <Suspense fallback={<ReviewSkeleton />}>
       <ReviewForm />
     </Suspense>
   );
