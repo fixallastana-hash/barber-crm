@@ -13,6 +13,10 @@ type Category = {
   name: string;
   isActive: boolean;
   order?: number;
+  iconUrl?: string;
+  iconPositionX?: number;
+  iconPositionY?: number;
+  iconScale?: number;
 };
 
 type Service = {
@@ -24,6 +28,10 @@ type Service = {
   bufferMinutes: number;
   priceKzt: number;
   isActive: boolean;
+  iconUrl?: string;
+  iconPositionX?: number;
+  iconPositionY?: number;
+  iconScale?: number;
 };
 
 export default function ServicesPage() {
@@ -977,6 +985,10 @@ export default function ServicesPage() {
         <EditCategoryModal
           categoryId={editingCategory.id}
           initialName={editingCategory.name}
+          initialIconUrl={editingCategory.iconUrl}
+          initialIconPositionX={editingCategory.iconPositionX}
+          initialIconPositionY={editingCategory.iconPositionY}
+          initialIconScale={editingCategory.iconScale}
           onClose={() => setEditingCategory(null)}
           onSaved={handleCategoryEditSaved}
         />
