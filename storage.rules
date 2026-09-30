@@ -5,6 +5,14 @@ service firebase.storage {
       allow read: if true;
       allow write: if false;
     }
+    match /service-icons/{tenantId}/{serviceId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /category-icons/{tenantId}/{categoryId} {
+      allow read: if true;
+      allow write: if false;
+    }
     match /{allPaths=**} {
       allow read, write: if false;
     }
