@@ -13,6 +13,9 @@ export type Appointment = {
   endMinutes: number;
   totalPriceKzt: number;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'noshow';
+  groupId?: string;
+  groupIndex?: number;
+  groupSize?: number;
 };
 
 export type Master = {
@@ -42,6 +45,27 @@ const statusClasses: Record<Appointment['status'], string> = {
   cancelled: 'bg-gray-100 border-gray-400',
   noshow: 'bg-red-100 border-red-400',
 };
+
+const GROUP_BORDER_COLORS = [
+  'border-l-purple-500',
+  'border-l-pink-500',
+  'border-l-cyan-500',
+  'border-l-orange-500',
+  'border-l-lime-500',
+  'border-l-indigo-500',
+  'border-l-rose-500',
+  'border-l-teal-500',
+];
+
+function groupColorClass(groupId?: string): string {
+  if (!groupId) return '';
+  let hash = 0;
+  for (let i = 0; i < groupId.length; i++) {
+    hash = ((hash << 5) - hash) + groupId.charCodeAt(i);
+    hash |= 0;
+  }
+  return GROUP_BORDER_COLORS[Math.abs(hash) % GROUP_BORDER_COLORS.length];
+}
 
 function minutesToTime(minutes: number): string {
   return (
@@ -148,6 +172,8 @@ export function CalendarGrid({
                     ((visibleEnd - visibleStart) / SLOT_STEP) * ROW_HEIGHT,
                   );
 
+                  const isGroup = !!appointment.groupId;
+
                   return (
                     <button
                       key={appointment.id}
@@ -155,11 +181,22 @@ export function CalendarGrid({
                       onClick={() => onAppointmentClick(appointment)}
                       className={
                         'absolute left-1 right-1 z-10 overflow-hidden rounded border p-1 text-left text-xs shadow-sm hover:brightness-95 ' +
-                        statusClasses[appointment.status]
+                        statusClasses[appointment.status] +
+                        (isGroup ? ' border-l-4 ' + groupColorClass(appointment.groupId) : '')
                       }
                       style={{ top, height }}
                     >
-                      <span className="block truncate font-semibold">
+                      {isGroup && (
+                        <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-black/25 px-1 text-[9px] font-bold leading-tight text-white">
+                          {appointment.groupIndex || 1}/{appointment.groupSize || 1}
+                        </span>
+                      )}
+                      <span
+                        className={
+                          'block truncate font-semibold' +
+                          (isGroup ? ' pr-7' : '')
+                        }
+                      >
                         {appointment.clientName}
                       </span>
                       <span className="block truncate">

@@ -24,6 +24,27 @@ const statusClasses: Record<Appointment['status'], string> = {
   noshow: 'bg-red-50 text-red-700 border-red-200',
 };
 
+const GROUP_BAR_COLORS = [
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-cyan-500',
+  'bg-orange-500',
+  'bg-lime-500',
+  'bg-indigo-500',
+  'bg-rose-500',
+  'bg-teal-500',
+];
+
+function groupBarClass(groupId?: string): string {
+  if (!groupId) return '';
+  let hash = 0;
+  for (let i = 0; i < groupId.length; i++) {
+    hash = ((hash << 5) - hash) + groupId.charCodeAt(i);
+    hash |= 0;
+  }
+  return GROUP_BAR_COLORS[Math.abs(hash) % GROUP_BAR_COLORS.length];
+}
+
 function minutesToTime(minutes: number): string {
   return (
     String(Math.floor(minutes / 60)).padStart(2, '0') +
@@ -70,15 +91,26 @@ export function CalendarList({
     <div className="divide-y divide-gray-200">
       {appointments.map((appointment) => {
         const master = masters.find((m) => m.id === appointment.masterId);
+        const isGroup = !!appointment.groupId;
 
         return (
           <button
             key={appointment.id}
             type="button"
             onClick={() => onAppointmentClick(appointment)}
-            className="flex w-full gap-3 p-3 text-left transition hover:bg-gray-50 active:bg-gray-100"
+            className="relative flex w-full gap-3 p-3 text-left transition hover:bg-gray-50 active:bg-gray-100"
           >
-            <div className="shrink-0 pt-0.5">
+            {isGroup && (
+              <span
+                className={
+                  'absolute bottom-0 left-0 top-0 w-1 ' +
+                  groupBarClass(appointment.groupId)
+                }
+                aria-hidden="true"
+              />
+            )}
+
+            <div className={'shrink-0 pt-0.5' + (isGroup ? ' pl-2' : '')}>
               <div className="text-sm font-semibold text-[#171717]">
                 {minutesToTime(appointment.startMinutes)}
               </div>
@@ -99,6 +131,11 @@ export function CalendarList({
                 >
                   {statusLabels[appointment.status]}
                 </span>
+                {isGroup && (
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">
+                    {appointment.groupIndex || 1}/{appointment.groupSize || 1}
+                  </span>
+                )}
               </div>
 
               <p className="mt-1 truncate text-xs text-gray-600">
