@@ -505,19 +505,71 @@ export const updateCategory = onCall(async (request) => {
   if (!categoryId) throw new HttpsError('invalid-argument', 'categoryId is required');
   if (!name) throw new HttpsError('invalid-argument', 'name is required');
 
-  await db.doc('tenants/' + tenantId + '/categories/' + categoryId).update({
-    name,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  const allowed = [
+    'name',
+    'iconUrl',
+    'iconPositionX',
+    'iconPositionY',
+    'iconScale',
+  ];
+  const updates: Record<string, unknown> = {};
+
+  for (const key of allowed) {
+    if (data[key] !== undefined) updates[key] = data[key];
+  }
+
+  if (updates.name !== undefined) {
+    if (
+      typeof updates.name !== 'string' ||
+      updates.name.trim().length === 0 ||
+      updates.name.trim().length > 100
+    ) {
+      throw new HttpsError('invalid-argument', 'name is empty or too long');
+    }
+    updates.name = updates.name.trim();
+  }
+
+  if (updates.iconUrl !== undefined && typeof updates.iconUrl !== 'string') {
+    throw new HttpsError('invalid-argument', 'iconUrl must be a string');
+  }
+
+  if (updates.iconPositionX !== undefined) {
+    const value = Number(updates.iconPositionX);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      throw new HttpsError('invalid-argument', 'iconPositionX must be between 0 and 100');
+    }
+    updates.iconPositionX = value;
+  }
+
+  if (updates.iconPositionY !== undefined) {
+    const value = Number(updates.iconPositionY);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      throw new HttpsError('invalid-argument', 'iconPositionY must be between 0 and 100');
+    }
+    updates.iconPositionY = value;
+  }
+
+  if (updates.iconScale !== undefined) {
+    const value = Number(updates.iconScale);
+    if (!Number.isFinite(value) || value < 1 || value > 3) {
+      throw new HttpsError('invalid-argument', 'iconScale must be between 1 and 3');
+    }
+    updates.iconScale = value;
+  }
+
+  updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+
+  await db.doc('tenants/' + tenantId + '/categories/' + categoryId).update(updates);
 
   const servicesSnap = await db
     .collection('tenants/' + tenantId + '/services')
     .where('categoryId', '==', categoryId)
     .get();
-  if (!servicesSnap.empty) {
+
+  if (!servicesSnap.empty && updates.name !== undefined) {
     const batch = db.batch();
     servicesSnap.forEach((doc) => {
-      batch.update(doc.ref, { categoryName: name });
+      batch.update(doc.ref, { categoryName: updates.name });
     });
     await batch.commit();
   }
@@ -582,6 +634,10 @@ export const createCategory = onCall(async (request) => {
   await db.doc('tenants/' + tenantId + '/categories/' + categoryId).set({
     name,
     order: data.order || 0,
+    iconUrl: '',
+    iconPositionX: 50,
+    iconPositionY: 50,
+    iconScale: 1,
     isActive: true,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
@@ -642,6 +698,10 @@ export const createService = onCall(async (request) => {
     bufferMinutes: bufferNum,
     priceKzt: priceNum,
     order: Number(data.order || 0),
+    iconUrl: '',
+    iconPositionX: 50,
+    iconPositionY: 50,
+    iconScale: 1,
     isActive: true,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
@@ -657,7 +717,17 @@ export const updateService = onCall(async (request) => {
   const serviceId = data.serviceId;
   if (!serviceId) throw new HttpsError('invalid-argument', 'serviceId is required');
 
-  const allowed = ['name', 'durationMinutes', 'bufferMinutes', 'priceKzt', 'order'];
+  const allowed = [
+    'name',
+    'durationMinutes',
+    'bufferMinutes',
+    'priceKzt',
+    'order',
+    'iconUrl',
+    'iconPositionX',
+    'iconPositionY',
+    'iconScale',
+  ];
   const updates: Record<string, unknown> = {};
   for (const key of allowed) {
     if (data[key] !== undefined) updates[key] = data[key];
@@ -708,6 +778,30 @@ export const updateService = onCall(async (request) => {
   }
   if (updates.order !== undefined) {
     updates.order = Number(updates.order);
+  }
+  if (updates.iconUrl !== undefined && typeof updates.iconUrl !== 'string') {
+    throw new HttpsError('invalid-argument', 'iconUrl must be a string');
+  }
+  if (updates.iconPositionX !== undefined) {
+    const value = Number(updates.iconPositionX);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      throw new HttpsError('invalid-argument', 'iconPositionX must be between 0 and 100');
+    }
+    updates.iconPositionX = value;
+  }
+  if (updates.iconPositionY !== undefined) {
+    const value = Number(updates.iconPositionY);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      throw new HttpsError('invalid-argument', 'iconPositionY must be between 0 and 100');
+    }
+    updates.iconPositionY = value;
+  }
+  if (updates.iconScale !== undefined) {
+    const value = Number(updates.iconScale);
+    if (!Number.isFinite(value) || value < 1 || value > 3) {
+      throw new HttpsError('invalid-argument', 'iconScale must be between 1 and 3');
+    }
+    updates.iconScale = value;
   }
 
   await db.doc('tenants/' + tenantId + '/services/' + serviceId).update(updates);
@@ -944,6 +1038,7 @@ export const widgetGetSalon = onCall({ invoker: 'public' }, async (request) => {
 
   if (!infoSnap.exists) return { status: 'not_found' };
   const info = infoSnap.data()!;
+
   const branches = branchesSnap.docs
     .filter((d) => d.data().isActive === true)
     .map((d) => ({
@@ -952,10 +1047,26 @@ export const widgetGetSalon = onCall({ invoker: 'public' }, async (request) => {
       address: d.data().address || '',
       city: d.data().city || '',
     }));
+
   const categories = categoriesSnap.docs
     .filter((d) => d.data().isActive === true)
-    .map((d) => ({ id: d.id, name: d.data().name, order: d.data().order || 0 }))
+    .map((d) => ({
+      id: d.id,
+      name: d.data().name,
+      order: d.data().order || 0,
+      iconUrl: d.data().iconUrl || '',
+      iconPositionX: Number.isFinite(Number(d.data().iconPositionX))
+        ? Number(d.data().iconPositionX)
+        : 50,
+      iconPositionY: Number.isFinite(Number(d.data().iconPositionY))
+        ? Number(d.data().iconPositionY)
+        : 50,
+      iconScale: Number.isFinite(Number(d.data().iconScale))
+        ? Number(d.data().iconScale)
+        : 1,
+    }))
     .sort((a, b) => a.order - b.order);
+
   const services = servicesSnap.docs
     .filter((d) => d.data().isActive === true)
     .map((d) => ({
@@ -965,7 +1076,18 @@ export const widgetGetSalon = onCall({ invoker: 'public' }, async (request) => {
       durationMinutes: d.data().durationMinutes,
       bufferMinutes: d.data().bufferMinutes || 0,
       priceKzt: d.data().priceKzt,
+      iconUrl: d.data().iconUrl || '',
+      iconPositionX: Number.isFinite(Number(d.data().iconPositionX))
+        ? Number(d.data().iconPositionX)
+        : 50,
+      iconPositionY: Number.isFinite(Number(d.data().iconPositionY))
+        ? Number(d.data().iconPositionY)
+        : 50,
+      iconScale: Number.isFinite(Number(d.data().iconScale))
+        ? Number(d.data().iconScale)
+        : 1,
     }));
+
   const masters = mastersSnap.docs
     .filter((d) => d.data().isActive === true)
     .map((d) => ({
@@ -1946,4 +2068,128 @@ export const uploadMasterPhoto = onCall(
 
     return { success: true, photoUrl };
   }
+);
+
+// ============ uploadServiceIcon ============
+
+export const uploadServiceIcon = onCall(
+  { invoker: 'public', memory: '512MiB' },
+  async (request) => {
+    const { tenantId, role } = requireAuth(request);
+    requireOwnerOrAdmin(role);
+
+    const data = request.data || {};
+    const serviceId = data.serviceId;
+    const iconBase64 = data.iconBase64;
+
+    if (!serviceId) {
+      throw new HttpsError('invalid-argument', 'serviceId is required');
+    }
+    if (typeof iconBase64 !== 'string' || !iconBase64) {
+      throw new HttpsError('invalid-argument', 'iconBase64 is required');
+    }
+
+    const base64 = iconBase64.includes(',')
+      ? iconBase64.split(',')[1]
+      : iconBase64;
+
+    if (!base64) {
+      throw new HttpsError('invalid-argument', 'iconBase64 is invalid');
+    }
+
+    const buffer = Buffer.from(base64, 'base64');
+    const maxBytes = 500 * 1024;
+
+    if (buffer.length === 0) {
+      throw new HttpsError('invalid-argument', 'iconBase64 is invalid');
+    }
+    if (buffer.length > maxBytes) {
+      throw new HttpsError('invalid-argument', 'iconBase64 exceeds maximum 500 KB');
+    }
+
+    const serviceRef = db.doc('tenants/' + tenantId + '/services/' + serviceId);
+    const serviceSnap = await serviceRef.get();
+    if (!serviceSnap.exists) {
+      throw new HttpsError('not-found', 'Service not found');
+    }
+
+    const bucket = admin.storage().bucket();
+    const path = 'service-icons/' + tenantId + '/' + serviceId + '.png';
+    const file = bucket.file(path);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: 'image/png',
+        cacheControl: 'public,max-age=31536000',
+      },
+    });
+
+    await file.makePublic();
+
+    const iconUrl = 'https://storage.googleapis.com/' + bucket.name + '/' + path;
+
+    return { iconUrl };
+  },
+);
+
+// ============ uploadCategoryIcon ============
+
+export const uploadCategoryIcon = onCall(
+  { invoker: 'public', memory: '512MiB' },
+  async (request) => {
+    const { tenantId, role } = requireAuth(request);
+    requireOwnerOrAdmin(role);
+
+    const data = request.data || {};
+    const categoryId = data.categoryId;
+    const iconBase64 = data.iconBase64;
+
+    if (!categoryId) {
+      throw new HttpsError('invalid-argument', 'categoryId is required');
+    }
+    if (typeof iconBase64 !== 'string' || !iconBase64) {
+      throw new HttpsError('invalid-argument', 'iconBase64 is required');
+    }
+
+    const base64 = iconBase64.includes(',')
+      ? iconBase64.split(',')[1]
+      : iconBase64;
+
+    if (!base64) {
+      throw new HttpsError('invalid-argument', 'iconBase64 is invalid');
+    }
+
+    const buffer = Buffer.from(base64, 'base64');
+    const maxBytes = 500 * 1024;
+
+    if (buffer.length === 0) {
+      throw new HttpsError('invalid-argument', 'iconBase64 is invalid');
+    }
+    if (buffer.length > maxBytes) {
+      throw new HttpsError('invalid-argument', 'iconBase64 exceeds maximum 500 KB');
+    }
+
+    const categoryRef = db.doc('tenants/' + tenantId + '/categories/' + categoryId);
+    const categorySnap = await categoryRef.get();
+    if (!categorySnap.exists) {
+      throw new HttpsError('not-found', 'Category not found');
+    }
+
+    const bucket = admin.storage().bucket();
+    const path = 'category-icons/' + tenantId + '/' + categoryId + '.png';
+    const file = bucket.file(path);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: 'image/png',
+        cacheControl: 'public,max-age=31536000',
+      },
+    });
+
+    await file.makePublic();
+
+    const iconUrl = 'https://storage.googleapis.com/' + bucket.name + '/' + path;
+
+    return { iconUrl };
+  },
 );
