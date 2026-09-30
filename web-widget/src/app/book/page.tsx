@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
 import { BookSkeleton } from '@/components/book-skeleton';
+import { GroupBookingFlow } from '@/components/group-booking-flow';
 
 type Service = {
   id: string;
@@ -48,8 +49,70 @@ type SalonData = {
 const ANY_MASTER = '__any__';
 
 const money = (n: number) => n.toLocaleString('ru-RU') + ' ₸';
-const rating = (n: number, count: number) => count ? `★ ${n.toFixed(1)} · ${count}` : 'Пока нет отзывов';
-const dateRu = (s: string) => s ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(s + 'T12:00:00Z')) : '';
+const rating = (n: number, count: number) =>
+  count ? `★ ${n.toFixed(1)} · ${count}` : 'Пока нет отзывов';
+const dateRu = (s: string) =>
+  s
+    ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(
+        new Date(s + 'T12:00:00Z')
+      )
+    : '';
+
+function BookingModeSelector({
+  onSelect,
+  salonName,
+}: {
+  onSelect: (mode: 'single' | 'group') => void;
+  salonName: string;
+}) {
+  return (
+    <main className="min-h-screen bg-surface px-4 py-6">
+      <div className="mx-auto w-full max-w-md">
+        <header className="mb-6">
+          <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
+            Онлайн-запись
+          </div>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-ink">{salonName}</h1>
+          <p className="mt-1 text-sm text-muted">Как вы хотите записаться?</p>
+        </header>
+
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => onSelect('single')}
+            className="flex w-full items-start gap-4 rounded-2xl border border-line bg-card p-5 text-left transition hover:border-primary"
+          >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface text-2xl text-ink">
+              👤
+            </div>
+            <div className="min-w-0 flex-1">
+              <b className="block text-base font-semibold text-ink">Записать одного</b>
+              <span className="mt-1 block text-sm text-muted">Обычная запись для себя</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSelect('group')}
+            className="flex w-full items-start gap-4 rounded-2xl border-2 border-primary bg-primary/5 p-5 text-left transition hover:bg-primary/10"
+          >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-2xl text-ink">
+              👨‍👩‍👧
+            </div>
+            <div className="min-w-0 flex-1">
+              <b className="block text-base font-semibold text-ink">
+                Записать нескольких (2–6)
+              </b>
+              <span className="mt-1 block text-sm text-muted">
+                Семья или друзья. Один телефон на всех.
+              </span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
 
 function BookingFlow() {
   const searchParams = useSearchParams();
@@ -57,8 +120,8 @@ function BookingFlow() {
   const slug = searchParams.get('slug') || '';
 
   const [salon, setSalon] = useState<SalonData | null>(null);
-  const [status, setStatus] = useState<'loading'|'ok'|'not_found'|'gone'>('loading');
-  const [step, setStep] = useState<1|2|3|4>(1);
+  const [status, setStatus] = useState<'loading' | 'ok' | 'not_found' | 'gone'>('loading');
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [categoryId, setCategoryId] = useState('');
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [masterId, setMasterId] = useState('');
@@ -73,9 +136,13 @@ function BookingFlow() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [bookingMode, setBookingMode] = useState<'single' | 'group' | null>(null);
 
   useEffect(() => {
-    if (!slug) { setStatus('not_found'); return; }
+    if (!slug) {
+      setStatus('not_found');
+      return;
+    }
     let cancelled = false;
     const load = async () => {
       try {
@@ -83,16 +150,25 @@ function BookingFlow() {
         const response = await fn({ slug });
         if (cancelled) return;
         const result = response.data as {
-          status: string; newSlug?: string; tenant?: SalonData['tenant'];
-          categories?: Category[]; services?: Service[]; masters?: Master[];
+          status: string;
+          newSlug?: string;
+          tenant?: SalonData['tenant'];
+          categories?: Category[];
+          services?: Service[];
+          masters?: Master[];
         };
         if (result.status === 'redirect' && result.newSlug) {
-          router.push('/book?slug=' + encodeURIComponent(result.newSlug)); return;
+          router.push('/book?slug=' + encodeURIComponent(result.newSlug));
+          return;
         }
         if (result.status === 'not_found' || result.status === 'gone') {
-          setStatus(result.status); return;
+          setStatus(result.status);
+          return;
         }
-        if (result.status !== 'ok' || !result.tenant) { setStatus('not_found'); return; }
+        if (result.status !== 'ok' || !result.tenant) {
+          setStatus('not_found');
+          return;
+        }
         setSalon({
           tenant: result.tenant,
           categories: result.categories || [],
@@ -100,10 +176,14 @@ function BookingFlow() {
           masters: result.masters || [],
         });
         setStatus('ok');
-      } catch { if (!cancelled) setStatus('not_found'); }
+      } catch {
+        if (!cancelled) setStatus('not_found');
+      }
     };
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [slug, router]);
 
   useEffect(() => {
@@ -112,17 +192,26 @@ function BookingFlow() {
 
   const eligibleMasters = useMemo(() => {
     if (!salon) return [];
-    return salon.masters.filter(m => m.serviceIds?.some(id => serviceIds.includes(id)));
+    return salon.masters.filter((m) =>
+      m.serviceIds?.some((id) => serviceIds.includes(id))
+    );
   }, [salon, serviceIds]);
 
   const loadSlots = useCallback(async () => {
     if (step !== 3 || !slug || !masterId || !date || !salon) return;
     const duration = serviceIds.reduce(
-      (sum, id) => sum + (salon.services.find(s => s.id === id)?.durationMinutes || 0), 0
+      (sum, id) => sum + (salon.services.find((s) => s.id === id)?.durationMinutes || 0),
+      0
     );
-    if (!duration) { setSlots([]); return; }
+    if (!duration) {
+      setSlots([]);
+      return;
+    }
 
-    setLoadingSlots(true); setSlot(null); setAssignedMasterId(''); setError('');
+    setLoadingSlots(true);
+    setSlot(null);
+    setAssignedMasterId('');
+    setError('');
 
     try {
       const fn = httpsCallable(getFirebaseFunctions(), 'widgetGetSlots');
@@ -136,8 +225,16 @@ function BookingFlow() {
         const results = await Promise.all(
           eligibleMasters.map(async (m) => {
             try {
-              const response = await fn({ slug, masterId: m.id, date, durationMinutes: duration });
-              return { masterId: m.id, slots: ((response.data as { slots?: Slot[] }).slots) || [] };
+              const response = await fn({
+                slug,
+                masterId: m.id,
+                date,
+                durationMinutes: duration,
+              });
+              return {
+                masterId: m.id,
+                slots: ((response.data as { slots?: Slot[] }).slots) || [],
+              };
             } catch {
               return { masterId: m.id, slots: [] as Slot[] };
             }
@@ -145,8 +242,8 @@ function BookingFlow() {
         );
 
         const byStart = new Map<number, Slot>();
-        results.forEach(r => {
-          r.slots.forEach(s => {
+        results.forEach((r) => {
+          r.slots.forEach((s) => {
             if (!byStart.has(s.start)) byStart.set(s.start, s);
           });
         });
@@ -161,15 +258,19 @@ function BookingFlow() {
     }
   }, [step, slug, masterId, date, serviceIds, salon, eligibleMasters]);
 
-  useEffect(() => { void loadSlots(); }, [loadSlots]);
+  useEffect(() => {
+    void loadSlots();
+  }, [loadSlots]);
 
   const toggleService = (id: string) =>
-    setServiceIds(current => current.includes(id) ? current.filter(x => x !== id) : [...current, id]);
+    setServiceIds((current) =>
+      current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
+    );
 
   const today = new Date();
-  const todayString = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  const max = new Date(today.getFullYear(), today.getMonth(), today.getDate()+30);
-  const maxDate = `${max.getFullYear()}-${String(max.getMonth()+1).padStart(2,'0')}-${String(max.getDate()).padStart(2,'0')}`;
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const max = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30);
+  const maxDate = `${max.getFullYear()}-${String(max.getMonth() + 1).padStart(2, '0')}-${String(max.getDate()).padStart(2, '0')}`;
 
   const pickMaster = (id: string) => {
     setMasterId(id);
@@ -180,19 +281,28 @@ function BookingFlow() {
   const pickSlot = async (chosen: Slot) => {
     if (masterId === ANY_MASTER) {
       const duration = serviceIds.reduce(
-        (sum, id) => sum + (salon?.services.find(s => s.id === id)?.durationMinutes || 0), 0
+        (sum, id) =>
+          sum + (salon?.services.find((s) => s.id === id)?.durationMinutes || 0),
+        0
       );
       const fn = httpsCallable(getFirebaseFunctions(), 'widgetGetSlots');
       let foundId = '';
       for (const m of eligibleMasters) {
         try {
-          const response = await fn({ slug, masterId: m.id, date, durationMinutes: duration });
+          const response = await fn({
+            slug,
+            masterId: m.id,
+            date,
+            durationMinutes: duration,
+          });
           const list = ((response.data as { slots?: Slot[] }).slots) || [];
-          if (list.some(s => s.start === chosen.start)) {
+          if (list.some((s) => s.start === chosen.start)) {
             foundId = m.id;
             break;
           }
-        } catch { /* пробуем следующего */ }
+        } catch {
+          /* пробуем следующего */
+        }
       }
       setAssignedMasterId(foundId || eligibleMasters[0]?.id || '');
     }
@@ -205,12 +315,19 @@ function BookingFlow() {
     e.preventDefault();
     const finalMasterId = masterId === ANY_MASTER ? assignedMasterId : masterId;
     if (!slug || !slot || !consent || !finalMasterId) return;
-    setSubmitting(true); setError('');
+    setSubmitting(true);
+    setError('');
     try {
       const fn = httpsCallable(getFirebaseFunctions(), 'widgetCreateAppointment');
       await fn({
-        slug, masterId: finalMasterId, serviceIds, date,
-        startMinutes: slot.start, clientName: name, clientPhone: phone, consent,
+        slug,
+        masterId: finalMasterId,
+        serviceIds,
+        date,
+        startMinutes: slot.start,
+        clientName: name,
+        clientPhone: phone,
+        consent,
       });
       setSuccess(true);
     } catch (err) {
@@ -222,7 +339,9 @@ function BookingFlow() {
       } else if (code === 'permission-denied') {
         setError('Онлайн-запись недоступна, позвоните в салон.');
       } else setError('Ошибка: ' + (e.message || 'неизвестная ошибка'));
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (status === 'loading') {
@@ -255,6 +374,25 @@ function BookingFlow() {
     );
   }
 
+  if (bookingMode === null) {
+    return (
+      <BookingModeSelector
+        onSelect={setBookingMode}
+        salonName={salon.tenant.name}
+      />
+    );
+  }
+
+  if (bookingMode === 'group') {
+    return (
+      <GroupBookingFlow
+        salon={salon}
+        slug={slug}
+        onExit={() => setBookingMode(null)}
+      />
+    );
+  }
+
   if (success) {
     return (
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
@@ -276,10 +414,10 @@ function BookingFlow() {
     );
   }
 
-  const selectedMaster = salon.masters.find(m => m.id === masterId);
-  const assignedMaster = salon.masters.find(m => m.id === assignedMasterId);
-  const services = salon.services.filter(s => s.categoryId === categoryId);
-  const selectedServices = salon.services.filter(s => serviceIds.includes(s.id));
+  const selectedMaster = salon.masters.find((m) => m.id === masterId);
+  const assignedMaster = salon.masters.find((m) => m.id === assignedMasterId);
+  const services = salon.services.filter((s) => s.categoryId === categoryId);
+  const selectedServices = salon.services.filter((s) => serviceIds.includes(s.id));
   const totalPrice = selectedServices.reduce((sum, s) => sum + s.priceKzt, 0);
   const steps = ['Услуги', 'Мастер', 'Время', 'Контакты'];
 
@@ -310,7 +448,11 @@ function BookingFlow() {
                 <div
                   className={[
                     'flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition',
-                    active ? 'bg-primary text-ink' : done ? 'bg-ink text-white' : 'bg-white text-muted border border-line',
+                    active
+                      ? 'bg-primary text-ink'
+                      : done
+                        ? 'bg-ink text-white'
+                        : 'border border-line bg-white text-muted',
                   ].join(' ')}
                 >
                   {done ? '✓' : i + 1}
@@ -348,7 +490,7 @@ function BookingFlow() {
             </div>
 
             <div className="mb-3 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-              {salon.categories.map(c => (
+              {salon.categories.map((c) => (
                 <button
                   key={c.id}
                   type="button"
@@ -374,7 +516,7 @@ function BookingFlow() {
             </div>
 
             <div className="space-y-2">
-              {services.map(s => {
+              {services.map((s) => {
                 const checked = serviceIds.includes(s.id);
                 return (
                   <button
@@ -397,14 +539,18 @@ function BookingFlow() {
                       <span
                         className={[
                           'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition',
-                          checked ? 'border-primary bg-primary text-ink' : 'border-line bg-white text-transparent',
+                          checked
+                            ? 'border-primary bg-primary text-ink'
+                            : 'border-line bg-white text-transparent',
                         ].join(' ')}
                       >
                         ✓
                       </span>
                     )}
                     <span className="min-w-0 flex-1">
-                      <b className="block truncate text-base font-semibold text-ink">{s.name}</b>
+                      <b className="block truncate text-base font-semibold text-ink">
+                        {s.name}
+                      </b>
                       <small className="mt-0.5 block text-sm text-muted">
                         {s.durationMinutes} мин
                       </small>
@@ -445,7 +591,7 @@ function BookingFlow() {
               </p>
             </div>
             <div className="space-y-2">
-              {eligibleMasters.map(m => (
+              {eligibleMasters.map((m) => (
                 <button
                   key={m.id}
                   type="button"
@@ -465,7 +611,9 @@ function BookingFlow() {
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
-                    <b className="block truncate text-base font-semibold text-ink">{m.name}</b>
+                    <b className="block truncate text-base font-semibold text-ink">
+                      {m.name}
+                    </b>
                     <small className="mt-0.5 block text-sm text-muted">
                       {rating(m.rating || 0, m.ratingCount || 0)}
                     </small>
@@ -481,7 +629,7 @@ function BookingFlow() {
                   className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-primary bg-primary/5 p-4 text-left transition hover:bg-primary/10"
                 >
                   <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-2xl text-ink">
-                    ★
+                    ⋯
                   </span>
                   <span className="min-w-0 flex-1">
                     <b className="block text-base font-semibold text-ink">Не важно</b>
@@ -521,7 +669,7 @@ function BookingFlow() {
               <p className="mt-1 text-sm text-muted">
                 {masterId === ANY_MASTER
                   ? 'Показываем время у всех свободных мастеров'
-                  : (selectedMaster?.name || 'Выберите удобное время')}
+                  : selectedMaster?.name || 'Выберите удобное время'}
               </p>
             </div>
 
@@ -532,7 +680,10 @@ function BookingFlow() {
                 min={todayString}
                 max={maxDate}
                 value={date}
-                onChange={e => { setDate(e.target.value); setSlots([]); }}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setSlots([]);
+                }}
                 className="h-14 w-full rounded-xl border border-line bg-card px-4 text-base text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
             </label>
@@ -545,7 +696,7 @@ function BookingFlow() {
               </div>
             ) : date ? (
               <div className="grid grid-cols-3 gap-2">
-                {slots.map(s => (
+                {slots.map((s) => (
                   <button
                     key={s.start}
                     type="button"
@@ -590,24 +741,30 @@ function BookingFlow() {
               <div className="flex justify-between gap-4">
                 <span className="shrink-0 text-sm text-muted">Услуги</span>
                 <b className="text-right text-base font-medium text-ink">
-                  {selectedServices.map(s => s.name).join(', ')}
+                  {selectedServices.map((s) => s.name).join(', ')}
                 </b>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="shrink-0 text-sm text-muted">Мастер</span>
                 <b className="text-right text-base font-medium text-ink">
                   {masterId === ANY_MASTER
-                    ? (assignedMaster ? `${assignedMaster.name} (любой)` : 'Любой доступный')
+                    ? assignedMaster
+                      ? `${assignedMaster.name} (любой)`
+                      : 'Любой доступный'
                     : selectedMaster?.name}
                 </b>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="shrink-0 text-sm text-muted">Дата и время</span>
-                <b className="text-right text-base font-medium text-ink">{dateRu(date)}, {slot.time}</b>
+                <b className="text-right text-base font-medium text-ink">
+                  {dateRu(date)}, {slot.time}
+                </b>
               </div>
               <div className="flex justify-between gap-4 border-t border-line pt-3">
                 <span className="shrink-0 text-sm text-muted">Стоимость</span>
-                <b className="text-right text-lg font-semibold text-ink">{money(totalPrice)}</b>
+                <b className="text-right text-lg font-semibold text-ink">
+                  {money(totalPrice)}
+                </b>
               </div>
             </div>
 
@@ -617,7 +774,7 @@ function BookingFlow() {
                 <input
                   required
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  onChange={(e) => setName(e.target.value)}
                   placeholder="Как к вам обращаться?"
                   className="h-14 w-full rounded-xl border border-line bg-card px-4 text-base text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30"
                 />
@@ -628,7 +785,7 @@ function BookingFlow() {
                   required
                   type="tel"
                   value={phone}
-                  onChange={e => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(e.target.value)}
                   placeholder="+7 ___ ___ __ __"
                   className="h-14 w-full rounded-xl border border-line bg-card px-4 text-base text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30"
                 />
@@ -638,7 +795,7 @@ function BookingFlow() {
                   required
                   type="checkbox"
                   checked={consent}
-                  onChange={e => setConsent(e.target.checked)}
+                  onChange={(e) => setConsent(e.target.checked)}
                   className="mt-0.5 h-5 w-5 shrink-0 accent-[#F4C842]"
                 />
                 <span className="text-sm leading-6 text-muted">
