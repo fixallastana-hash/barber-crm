@@ -879,6 +879,7 @@ export const createAdmin = onCall(async (request) => {
 
   return { success: true, uid };
 });
+
 // ============ helpers for slots ============
 
 function timeToMinutes(t: string): number {
@@ -1542,29 +1543,58 @@ export const autoNoshow = onSchedule(
           continue;
         }
 
-        await apptDoc.ref.update({
-          status: 'noshow',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
+        const appointmentRef = apptDoc.ref;
         const clientId = appt.clientId as string;
-        if (clientId) {
-          const clientRef = db.doc('tenants/' + tenantId + '/clients/' + clientId);
-          const clientSnap = await clientRef.get();
-          if (clientSnap.exists) {
+        const eventId = 'noshow:' + apptDoc.id;
+
+        const processed = await db.runTransaction(async (tx) => {
+          const appointmentSnap = await tx.get(appointmentRef);
+
+          if (!appointmentSnap.exists) {
+            return false;
+          }
+
+          const currentAppointment = appointmentSnap.data()!;
+          const processedEvents = (currentAppointment.processedEvents as string[]) || [];
+
+          if (processedEvents.includes(eventId)) {
+            return false;
+          }
+
+          let clientSnap: admin.firestore.DocumentSnapshot | null = null;
+          let clientRef: admin.firestore.DocumentReference | null = null;
+
+          if (clientId) {
+            clientRef = db.doc('tenants/' + tenantId + '/clients/' + clientId);
+            clientSnap = await tx.get(clientRef);
+          }
+
+          tx.update(appointmentRef, {
+            status: 'noshow',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            processedEvents: admin.firestore.FieldValue.arrayUnion(eventId),
+          });
+
+          if (clientRef && clientSnap?.exists) {
             const client = clientSnap.data()!;
             const newNoshowCount = ((client.noshowCount as number) || 0) + 1;
             const updates: Record<string, unknown> = {
               noshowCount: newNoshowCount,
             };
+
             if (newNoshowCount >= noshowThreshold) {
               updates.isBlocked = true;
             }
-            await clientRef.update(updates);
-          }
-        }
 
-        totalProcessed += 1;
+            tx.update(clientRef, updates);
+          }
+
+          return true;
+        });
+
+        if (processed) {
+          totalProcessed += 1;
+        }
       }
     }
 
