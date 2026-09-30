@@ -6,11 +6,44 @@ import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
 import { BookSkeleton } from '@/components/book-skeleton';
 
-type Service = { id: string; name: string; categoryId: string; durationMinutes: number; priceKzt: number };
-type Master = { id: string; name: string; photoUrl: string; rating: number; ratingCount: number; serviceIds: string[] };
-type Category = { id: string; name: string };
+type Service = {
+  id: string;
+  name: string;
+  categoryId: string;
+  durationMinutes: number;
+  priceKzt: number;
+  iconUrl: string;
+  iconPositionX: number;
+  iconPositionY: number;
+  iconScale: number;
+};
+
+type Master = {
+  id: string;
+  name: string;
+  photoUrl: string;
+  rating: number;
+  ratingCount: number;
+  serviceIds: string[];
+};
+
+type Category = {
+  id: string;
+  name: string;
+  iconUrl: string;
+  iconPositionX: number;
+  iconPositionY: number;
+  iconScale: number;
+};
+
 type Slot = { start: number; end: number; time: string };
-type SalonData = { tenant: { name: string; city: string }; categories: Category[]; services: Service[]; masters: Master[] };
+
+type SalonData = {
+  tenant: { name: string; city: string };
+  categories: Category[];
+  services: Service[];
+  masters: Master[];
+};
 
 const ANY_MASTER = '__any__';
 
@@ -321,12 +354,20 @@ function BookingFlow() {
                   type="button"
                   onClick={() => setCategoryId(c.id)}
                   className={[
-                    'shrink-0 rounded-full px-4 py-2.5 text-sm font-medium transition',
+                    'flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition',
                     categoryId === c.id
                       ? 'bg-ink text-white'
                       : 'border border-line bg-white text-muted hover:border-ink hover:text-ink',
                   ].join(' ')}
                 >
+                  {c.iconUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={c.iconUrl}
+                      alt=""
+                      className="h-5 w-5 shrink-0 rounded-full object-cover"
+                    />
+                  )}
                   {c.name}
                 </button>
               ))}
@@ -345,14 +386,23 @@ function BookingFlow() {
                       checked ? 'border-primary shadow-sm' : 'border-line hover:border-ink/30',
                     ].join(' ')}
                   >
-                    <span
-                      className={[
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition',
-                        checked ? 'border-primary bg-primary text-ink' : 'border-line bg-white text-transparent',
-                      ].join(' ')}
-                    >
-                      ✓
-                    </span>
+                    {s.iconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={s.iconUrl}
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span
+                        className={[
+                          'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition',
+                          checked ? 'border-primary bg-primary text-ink' : 'border-line bg-white text-transparent',
+                        ].join(' ')}
+                      >
+                        ✓
+                      </span>
+                    )}
                     <span className="min-w-0 flex-1">
                       <b className="block truncate text-base font-semibold text-ink">{s.name}</b>
                       <small className="mt-0.5 block text-sm text-muted">
