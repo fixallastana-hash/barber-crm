@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getFirebaseAuth } from '@/lib/firebase';
+import { useAuth } from '@/lib/auth-context';
 
 function mapFirebaseError(code: string): string {
   switch (code) {
@@ -30,10 +32,23 @@ function mapFirebaseError(code: string): string {
 }
 
 export default function LoginPage() {
+  const router = useRouter();
+  const { user, loading: authLoading, isTenantMissing } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Редирект ТОЛЬКО когда auth-context подтвердил, что user получен.
+  // Это убирает гонку: signIn завершается раньше, чем onIdTokenChanged
+  // успевает установить user, и /app/layout может выкинуть обратно на /login.
+  useEffect(() => {
+    if (authLoading) return;
+    if (user && user.tenantId) {
+      router.replace('/app');
+    }
+  }, [user, authLoading, router]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -42,10 +57,13 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const auth = getFirebaseAuth();
-
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      // Редирект на /app делает auth-context в /app/layout.tsx
+      await signInWithEmailAndPassword(
+        getFirebaseAuth(),
+        email.trim(),
+        password,
+      );
+      // Никакого router.push здесь — редирект сделает useEffect выше,
+      // когда auth-context получит user с tenantId.
     } catch (err) {
       const code =
         typeof err === 'object' && err !== null && 'code' in err
@@ -89,6 +107,12 @@ export default function LoginPage() {
               </div>
             )}
 
+            {isTenantMissing && (
+              <div className="mb-5 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm leading-5 text-amber-800">
+                Аккаунт не привязан к салону. Обратитесь к владельцу платформы.
+              </div>
+            )}
+
             <label className="mb-5 block">
               <span className="mb-2 block text-sm font-medium text-[#403d39]">
                 Email
@@ -123,7 +147,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || authLoading}
               className="h-12 w-full rounded-xl bg-[#171717] text-sm font-semibold text-white transition hover:bg-[#292929] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? 'Входим...' : 'Войти'}
