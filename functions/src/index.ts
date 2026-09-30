@@ -604,18 +604,43 @@ export const createService = onCall(async (request) => {
   if (!durationMinutes) throw new HttpsError('invalid-argument', 'durationMinutes is required');
   if (priceKzt === undefined) throw new HttpsError('invalid-argument', 'priceKzt is required');
 
+  if (typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
+    throw new HttpsError('invalid-argument', 'name is empty or too long');
+  }
+  const durationNum = Number(durationMinutes);
+  if (!Number.isInteger(durationNum) || durationNum <= 0) {
+    throw new HttpsError('invalid-argument', 'durationMinutes must be a positive integer');
+  }
+  if (durationNum > 480) {
+    throw new HttpsError('invalid-argument', 'durationMinutes exceeds maximum 480');
+  }
+  const bufferNum = Number(data.bufferMinutes || 0);
+  if (!Number.isInteger(bufferNum) || bufferNum < 0) {
+    throw new HttpsError('invalid-argument', 'bufferMinutes must be a non-negative integer');
+  }
+  if (bufferNum > 120) {
+    throw new HttpsError('invalid-argument', 'bufferMinutes exceeds maximum 120');
+  }
+  const priceNum = Number(priceKzt);
+  if (!Number.isInteger(priceNum) || priceNum < 0) {
+    throw new HttpsError('invalid-argument', 'priceKzt must be a non-negative integer');
+  }
+  if (priceNum > 10000000) {
+    throw new HttpsError('invalid-argument', 'priceKzt exceeds maximum 10000000');
+  }
+
   const catSnap = await db.doc('tenants/' + tenantId + '/categories/' + categoryId).get();
   if (!catSnap.exists) throw new HttpsError('not-found', 'Category not found');
   const categoryName = catSnap.data()!.name as string;
 
   const serviceId = db.collection('tenants/' + tenantId + '/services').doc().id;
   await db.doc('tenants/' + tenantId + '/services/' + serviceId).set({
-    name,
+    name: name.trim(),
     categoryId,
     categoryName,
-    durationMinutes: Number(durationMinutes),
-    bufferMinutes: Number(data.bufferMinutes || 0),
-    priceKzt: Number(priceKzt),
+    durationMinutes: durationNum,
+    bufferMinutes: bufferNum,
+    priceKzt: priceNum,
     order: Number(data.order || 0),
     isActive: true,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -641,6 +666,50 @@ export const updateService = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'No valid fields to update');
   }
 
+  if (updates.name !== undefined) {
+    if (
+      typeof updates.name !== 'string' ||
+      updates.name.trim().length === 0 ||
+      updates.name.trim().length > 100
+    ) {
+      throw new HttpsError('invalid-argument', 'name is empty or too long');
+    }
+    updates.name = updates.name.trim();
+  }
+  if (updates.durationMinutes !== undefined) {
+    const durationNum = Number(updates.durationMinutes);
+    if (!Number.isInteger(durationNum) || durationNum <= 0) {
+      throw new HttpsError('invalid-argument', 'durationMinutes must be a positive integer');
+    }
+    if (durationNum > 480) {
+      throw new HttpsError('invalid-argument', 'durationMinutes exceeds maximum 480');
+    }
+    updates.durationMinutes = durationNum;
+  }
+  if (updates.bufferMinutes !== undefined) {
+    const bufferNum = Number(updates.bufferMinutes);
+    if (!Number.isInteger(bufferNum) || bufferNum < 0) {
+      throw new HttpsError('invalid-argument', 'bufferMinutes must be a non-negative integer');
+    }
+    if (bufferNum > 120) {
+      throw new HttpsError('invalid-argument', 'bufferMinutes exceeds maximum 120');
+    }
+    updates.bufferMinutes = bufferNum;
+  }
+  if (updates.priceKzt !== undefined) {
+    const priceNum = Number(updates.priceKzt);
+    if (!Number.isInteger(priceNum) || priceNum < 0) {
+      throw new HttpsError('invalid-argument', 'priceKzt must be a non-negative integer');
+    }
+    if (priceNum > 10000000) {
+      throw new HttpsError('invalid-argument', 'priceKzt exceeds maximum 10000000');
+    }
+    updates.priceKzt = priceNum;
+  }
+  if (updates.order !== undefined) {
+    updates.order = Number(updates.order);
+  }
+
   await db.doc('tenants/' + tenantId + '/services/' + serviceId).update(updates);
   return { success: true };
 });
@@ -655,6 +724,7 @@ export const deactivateService = onCall(async (request) => {
 
   await db.doc('tenants/' + tenantId + '/services/' + serviceId).update({
     isActive: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   return { success: true };
