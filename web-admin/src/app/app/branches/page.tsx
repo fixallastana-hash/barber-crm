@@ -28,6 +28,7 @@ export default function BranchesPage() {
   const [formPhone, setFormPhone] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [restoringBranchId, setRestoringBranchId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -115,6 +116,29 @@ export default function BranchesPage() {
     }
   };
 
+  const handleActivate = async (branchId: string) => {
+    setRestoringBranchId(branchId);
+    setError('');
+
+    try {
+      const activateBranch = httpsCallable(
+        getFirebaseFunctions(),
+        'activateBranch',
+      );
+
+      await activateBranch({ branchId });
+    } catch (err: unknown) {
+      console.error('Не удалось восстановить филиал', err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось восстановить филиал',
+      );
+    } finally {
+      setRestoringBranchId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-w-0">
@@ -134,7 +158,6 @@ export default function BranchesPage() {
 
   return (
     <div className="min-w-0">
-      {/* Header */}
       <div className="mb-6">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#aaa6a0]">
           Структура бизнеса
@@ -149,7 +172,6 @@ export default function BranchesPage() {
         </p>
       </div>
 
-      {/* Кнопка "Добавить филиал" — на всю ширину */}
       <button
         type="button"
         onClick={() => setShowForm((visible) => !visible)}
@@ -159,14 +181,12 @@ export default function BranchesPage() {
         <span>{showForm ? 'Отмена' : 'Добавить филиал'}</span>
       </button>
 
-      {/* Error */}
       {error && (
         <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      {/* Create form */}
       {showForm && (
         <form
           onSubmit={handleCreate}
@@ -220,9 +240,7 @@ export default function BranchesPage() {
               <input
                 type="text"
                 value={formAddress}
-                onChange={(event) =>
-                  setFormAddress(event.target.value)
-                }
+                onChange={(event) => setFormAddress(event.target.value)}
                 placeholder="Улица, дом"
                 className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-[#171717] outline-none transition focus:border-black"
               />
@@ -255,7 +273,6 @@ export default function BranchesPage() {
         </form>
       )}
 
-      {/* Branches */}
       {branches.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#f1f1ee] text-[#737373]">
@@ -293,7 +310,6 @@ export default function BranchesPage() {
               key={branch.id}
               className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
             >
-              {/* Верхняя часть: иконка + информация */}
               <div className="flex items-start gap-3">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#f1f1ee] text-[#66615b]">
                   <svg
@@ -348,14 +364,24 @@ export default function BranchesPage() {
                 </div>
               </div>
 
-              {/* Кнопка "Деактивировать" на всю ширину */}
-              {branch.isActive && (
+              {branch.isActive ? (
                 <button
                   type="button"
                   onClick={() => void handleDeactivate(branch.id)}
                   className="mt-4 flex h-11 w-full items-center justify-center rounded-xl border border-black bg-white text-sm font-medium text-black transition-colors hover:bg-black hover:text-white"
                 >
                   Деактивировать
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleActivate(branch.id)}
+                  disabled={restoringBranchId === branch.id}
+                  className="mt-4 flex h-11 w-full items-center justify-center rounded-xl border border-green-600 bg-white text-sm font-medium text-green-700 transition-colors hover:bg-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {restoringBranchId === branch.id
+                    ? 'Восстанавливаем…'
+                    : 'Восстановить'}
                 </button>
               )}
             </div>
