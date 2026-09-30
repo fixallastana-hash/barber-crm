@@ -197,8 +197,6 @@ export const deactivateBranch = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ createMaster ============
-
 export const createMaster = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -239,8 +237,6 @@ export const createMaster = onCall(async (request) => {
   return { success: true, masterId };
 });
 
-// ============ updateMaster ============
-
 export const updateMaster = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -278,8 +274,6 @@ export const updateMaster = onCall(async (request) => {
   await db.doc('tenants/' + tenantId + '/masters/' + masterId).update(updates);
   return { success: true };
 });
-
-// ============ updateMasterCompensation ============
 
 export const updateMasterCompensation = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
@@ -361,8 +355,6 @@ export const updateMasterCompensation = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ getMasterCompensation ============
-
 export const getMasterCompensation = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
 
@@ -402,8 +394,6 @@ export const getMasterCompensation = onCall(async (request) => {
   };
 });
 
-// ============ deactivateMaster ============
-
 export const deactivateMaster = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -418,8 +408,6 @@ export const deactivateMaster = onCall(async (request) => {
 
   return { success: true };
 });
-
-// ============ deleteService ============
 
 export const deleteService = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
@@ -450,8 +438,6 @@ export const deleteService = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ deleteCategory ============
-
 export const deleteCategory = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -477,8 +463,6 @@ export const deleteCategory = onCall(async (request) => {
 
   return { success: true };
 });
-
-// ============ updateCategory ============
 
 export const updateCategory = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
@@ -511,8 +495,6 @@ export const updateCategory = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ deactivateCategory ============
-
 export const deactivateCategory = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -542,8 +524,6 @@ export const deactivateCategory = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ createCategory ============
-
 export const createCategory = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -562,8 +542,6 @@ export const createCategory = onCall(async (request) => {
 
   return { success: true, categoryId };
 });
-
-// ============ createService ============
 
 export const createService = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
@@ -600,8 +578,6 @@ export const createService = onCall(async (request) => {
   return { success: true, serviceId };
 });
 
-// ============ updateService ============
-
 export const updateService = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -623,8 +599,6 @@ export const updateService = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ deactivateService ============
-
 export const deactivateService = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -640,8 +614,6 @@ export const deactivateService = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ helpers для клиентов ============
-
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.length === 11 && digits.startsWith('8')) {
@@ -655,8 +627,6 @@ function normalizePhone(phone: string): string {
   }
   return '+' + digits;
 }
-
-// ============ createClient ============
 
 export const createClient = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
@@ -698,8 +668,6 @@ export const createClient = onCall(async (request) => {
   return { success: true, clientId };
 });
 
-// ============ updateClient ============
-
 export const updateClient = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -721,8 +689,6 @@ export const updateClient = onCall(async (request) => {
   return { success: true };
 });
 
-// ============ blockClient ============
-
 export const blockClient = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
@@ -738,8 +704,6 @@ export const blockClient = onCall(async (request) => {
 
   return { success: true };
 });
-
-// ============ createAdmin ============
 
 export const createAdmin = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
@@ -783,7 +747,6 @@ export const createAdmin = onCall(async (request) => {
 
   return { success: true, uid };
 });
-
 // ============ helpers for slots ============
 
 function timeToMinutes(t: string): number {
@@ -1359,7 +1322,18 @@ export const updateAppointmentStatus = onCall(async (request) => {
   if (!apptSnap.exists) throw new HttpsError('not-found', 'Appointment not found');
   const appt = apptSnap.data()!;
   const oldStatus = appt.status;
-  if (oldStatus === newStatus) return { success: true };
+
+  const allowedTransitions: Record<string, string[]> = {
+    pending: ['confirmed', 'cancelled'],
+    confirmed: ['completed', 'cancelled', 'noshow'],
+    noshow: ['completed'],
+  };
+  if (!(allowedTransitions[oldStatus] || []).includes(newStatus)) {
+    throw new HttpsError(
+      'failed-precondition',
+      `Invalid status transition: ${oldStatus} → ${newStatus}`,
+    );
+  }
 
   const updates: Record<string, unknown> = {
     status: newStatus,
