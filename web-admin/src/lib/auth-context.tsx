@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { onIdTokenChanged, signOut as fbSignOut } from 'firebase/auth';
+import { onIdTokenChanged, signOut as fbSignOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirebaseAuth } from './firebase';
 
 export type UserRole = 'owner' | 'admin' | null;
@@ -63,7 +63,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let unsubscribe: () => void = () => {};
 
-    try {
+    async function initAuth() {
+      try {
+        const auth = getFirebaseAuth();
+        // ЯВНО устанавливаем localStorage persistence — иначе в Next.js
+        // Firebase может выбрать inMemoryPersistence, и токен не сохранится.
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          err instanceof Error ? err.message : 'Не удалось настроить сессию Firebase';
+        setAuthError(message);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
       const auth = getFirebaseAuth();
 
       unsubscribe = onIdTokenChanged(auth, async (fbUser) => {
@@ -79,9 +94,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           let parsed = await readUserFromToken(fbUser);
 
-          // Если в токене нет tenantId — форсируем обновление один раз.
-          // Это покрывает случай, когда claims появились только что
-          // (например, через bootstrap-owner.js).
           if (!parsed.tenantId) {
             parsed = await readUserFromToken({
               uid: fbUser.uid,
@@ -106,15 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
         }
       });
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Не удалось инициализировать Firebase';
-      setAuthError(message);
-      setUser(null);
-      setLoading(false);
     }
+
+    void initAuth();
 
     return () => {
       cancelled = true;
