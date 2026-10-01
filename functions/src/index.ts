@@ -1684,6 +1684,7 @@ export const updateAppointmentStatus = onCall(async (request) => {
   const apptRef = db.doc('tenants/' + tenantId + '/appointments/' + appointmentId);
 
   const result = await db.runTransaction(async (tx) => {
+    // ============ ALL READS FIRST ============
     const apptSnap = await tx.get(apptRef);
     if (!apptSnap.exists) throw new HttpsError('not-found', 'Appointment not found');
 
@@ -1702,6 +1703,24 @@ export const updateAppointmentStatus = onCall(async (request) => {
       );
     }
 
+    // READ: ledger for cancellation
+    let ledgerRef: DocumentReference | null = null;
+    let ledgerSnap: DocumentSnapshot | null = null;
+    if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
+      ledgerRef = db.doc('tenants/' + tenantId + '/ledger/' + appt.masterId + '_' + appt.date);
+      ledgerSnap = await tx.get(ledgerRef);
+    }
+
+    // READ: compensation for completion
+    let compensationSnap: DocumentSnapshot | null = null;
+    if (newStatus === 'completed' && oldStatus !== 'completed') {
+      const compensationRef = db.doc(
+        'tenants/' + tenantId + '/masters/' + appt.masterId + '/private/compensation',
+      );
+      compensationSnap = await tx.get(compensationRef);
+    }
+
+    // ============ ALL WRITES AFTER ============
     const updates: Record<string, unknown> = {
       status: newStatus,
       updatedAt: FieldValue.serverTimestamp(),
@@ -1717,25 +1736,14 @@ export const updateAppointmentStatus = onCall(async (request) => {
 
     tx.update(apptRef, updates);
 
-    if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
-      const ledgerRef = db.doc(
-        'tenants/' + tenantId + '/ledger/' + appt.masterId + '_' + appt.date,
+    if (ledgerRef && ledgerSnap && ledgerSnap.exists) {
+      const slots = (ledgerSnap.data()!.slots || []).filter(
+        (s: { appointmentId?: string }) => s.appointmentId !== appointmentId,
       );
-      const ledgerSnap = await tx.get(ledgerRef);
-      if (ledgerSnap.exists) {
-        const slots = (ledgerSnap.data()!.slots || []).filter(
-          (s: { appointmentId?: string }) => s.appointmentId !== appointmentId,
-        );
-        tx.update(ledgerRef, { slots });
-      }
+      tx.update(ledgerRef, { slots });
     }
 
-    if (newStatus === 'completed' && oldStatus !== 'completed') {
-      const masterId = appt.masterId as string;
-      const compensationRef = db.doc(
-        'tenants/' + tenantId + '/masters/' + masterId + '/private/compensation',
-      );
-      const compensationSnap = await tx.get(compensationRef);
+    if (compensationSnap !== null) {
       const compensation = compensationSnap.exists
         ? (compensationSnap.data() as CompensationData)
         : null;
@@ -1746,7 +1754,7 @@ export const updateAppointmentStatus = onCall(async (request) => {
       const entryRef = db.collection('tenants/' + tenantId + '/financialLedger').doc();
       tx.set(entryRef, {
         appointmentId,
-        masterId,
+        masterId: appt.masterId,
         masterName: appt.masterName || '',
         clientId: appt.clientId || '',
         clientName: appt.clientName || '',
