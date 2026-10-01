@@ -84,7 +84,7 @@ service cloud.firestore {
       }
 
       match /financialLedger/{entryId} {
-        allow read: if isOwnerOrAdmin(tenantId);
+        allow read: if isOwner(tenantId);
         allow write: if false;
       }
 
