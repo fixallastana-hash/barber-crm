@@ -4,11 +4,19 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { getFunctions } from 'firebase-admin/functions';
-import * as admin from 'firebase-admin';
+import { initializeApp } from 'firebase-admin/app';
+import {
+  getFirestore,
+  FieldValue,
+  type DocumentReference,
+  type DocumentSnapshot,
+} from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 
-admin.initializeApp();
-const db = admin.firestore();
-const auth = admin.auth();
+initializeApp();
+const db = getFirestore();
+const auth = getAuth();
 
 setGlobalOptions({ region: 'asia-east1' });
 
@@ -73,7 +81,7 @@ export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
     requireConfirmation: false,
     pendingConfirmationTimeoutMinutes: 30,
     isActive: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     _schemaVersion: 4,
   });
 
@@ -84,7 +92,7 @@ export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
     messagesLimitThisMonth: 500,
     messagesUsedThisMonth: 0,
     isBlocked: false,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   batch.set(db.doc('tenants/' + tenantId + '/users/' + uid), {
@@ -93,7 +101,7 @@ export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
     phone: '',
     email: email,
     isActive: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
 
   await batch.commit();
@@ -122,7 +130,7 @@ export const updateSalonInfo = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'No valid fields to update');
   }
 
-  updates['updatedAt'] = admin.firestore.FieldValue.serverTimestamp();
+  updates['updatedAt'] = FieldValue.serverTimestamp();
   await db.doc('tenants/' + tenantId + '/config/info').update(updates);
 
   return { success: true };
@@ -154,7 +162,7 @@ export const createBranch = onCall(async (request) => {
     phone: data.phone || '',
     workingHours,
     isActive: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
 
   return { success: true, branchId };
@@ -245,7 +253,7 @@ export const createMaster = onCall(async (request) => {
     color: data.color || '#4A90D9',
     schedule: defaultSchedule,
     isActive: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     _schemaVersion: 4,
   });
 
@@ -333,7 +341,7 @@ export const updateMasterCompensation = onCall(async (request) => {
       baseSalaryKzt: numberValue(data.baseSalaryKzt, 'baseSalaryKzt'),
       commissionPercent: numberValue(data.commissionPercent, 'commissionPercent', 100),
       bonusKzt: numberValue(data.bonusKzt, 'bonusKzt'),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
   } else {
     const rentType = data.rentType;
@@ -347,7 +355,7 @@ export const updateMasterCompensation = onCall(async (request) => {
         type: 'renter',
         rentType: 'fixed',
         fixedAmountKzt: numberValue(data.fixedAmountKzt, 'fixedAmountKzt'),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       };
     } else {
       compensation = {
@@ -358,7 +366,7 @@ export const updateMasterCompensation = onCall(async (request) => {
           'percentageOfRevenue',
           100,
         ),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       };
     }
   }
@@ -459,7 +467,7 @@ export const deleteService = onCall(async (request) => {
   const batch = db.batch();
   mastersSnap.forEach((m) => {
     batch.update(m.ref, {
-      serviceIds: admin.firestore.FieldValue.arrayRemove(serviceId),
+      serviceIds: FieldValue.arrayRemove(serviceId),
     });
   });
   batch.delete(serviceRef);
@@ -557,7 +565,7 @@ export const updateCategory = onCall(async (request) => {
     updates.iconScale = value;
   }
 
-  updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+  updates.updatedAt = FieldValue.serverTimestamp();
 
   await db.doc('tenants/' + tenantId + '/categories/' + categoryId).update(updates);
 
@@ -600,7 +608,7 @@ export const deactivateCategory = onCall(async (request) => {
 
   await db.doc('tenants/' + tenantId + '/categories/' + categoryId).update({
     isActive: false,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return { success: true };
@@ -616,7 +624,7 @@ export const activateCategory = onCall(async (request) => {
 
   await db.doc('tenants/' + tenantId + '/categories/' + categoryId).update({
     isActive: true,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return { success: true };
@@ -639,7 +647,7 @@ export const createCategory = onCall(async (request) => {
     iconPositionY: 50,
     iconScale: 1,
     isActive: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
 
   return { success: true, categoryId };
@@ -703,7 +711,7 @@ export const createService = onCall(async (request) => {
     iconPositionY: 50,
     iconScale: 1,
     isActive: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
 
   return { success: true, serviceId };
@@ -818,7 +826,7 @@ export const deactivateService = onCall(async (request) => {
 
   await db.doc('tenants/' + tenantId + '/services/' + serviceId).update({
     isActive: false,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return { success: true };
@@ -834,7 +842,7 @@ export const activateService = onCall(async (request) => {
 
   await db.doc('tenants/' + tenantId + '/services/' + serviceId).update({
     isActive: true,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return { success: true };
@@ -884,7 +892,7 @@ export const createClient = onCall(async (request) => {
     noshowCount: 0,
     isBlocked: false,
     marketingOptOut: false,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     _schemaVersion: 4,
   });
 
@@ -966,7 +974,7 @@ export const createAdmin = onCall(async (request) => {
     phone,
     email,
     isActive: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
 
   await auth.setCustomUserClaims(uid, { tenantId, role: 'admin' });
@@ -1288,7 +1296,7 @@ export const widgetCreateAppointment = onCall({ invoker: 'public' }, async (requ
     const existingClient = clientSnap.data()!;
     clientData = { name: existingClient.name, phoneNormalized: existingClient.phoneNormalized };
     if (existingClient.name !== clientName && !(existingClient.nameVariants || []).includes(clientName)) {
-      await clientRef.update({ nameVariants: admin.firestore.FieldValue.arrayUnion(clientName) });
+      await clientRef.update({ nameVariants: FieldValue.arrayUnion(clientName) });
     }
   } else {
     const newClientRef = db.collection('tenants/' + tenantId + '/clients').doc();
@@ -1303,8 +1311,8 @@ export const widgetCreateAppointment = onCall({ invoker: 'public' }, async (requ
       noshowCount: 0,
       isBlocked: false,
       marketingOptOut: false,
-      consentGivenAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      consentGivenAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       _schemaVersion: 4,
     });
     batch.set(phoneIdxRef, { clientId });
@@ -1344,7 +1352,7 @@ export const widgetCreateAppointment = onCall({ invoker: 'public' }, async (requ
       status: 'confirmed',
       source: 'widget',
       processedEvents: [],
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       _schemaVersion: 4,
     });
     tx.set(ledgerRef, {
@@ -1357,7 +1365,7 @@ export const widgetCreateAppointment = onCall({ invoker: 'public' }, async (requ
         appointmentId: appointmentRef.id,
         branchId,
       }],
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     }, { merge: false });
   });
   return { success: true, appointmentId: appointmentRef.id };
@@ -1390,19 +1398,19 @@ export const updateWidgetSlug = onCall(async (request) => {
       tenantId,
       isAlias: false,
       isDeleted: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
     if (oldSlug) {
       tx.set(db.doc('slugRegistry/' + oldSlug), {
         tenantId,
         isAlias: true,
         redirectsTo: newSlug,
-        aliasCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        aliasCreatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
     }
     tx.update(infoRef, {
       widgetSlug: newSlug,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
   });
   return { success: true, slug: newSlug };
@@ -1568,7 +1576,7 @@ export const createAppointment = onCall(async (request) => {
       status: 'confirmed',
       source,
       processedEvents: [],
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       _schemaVersion: 4,
     });
 
@@ -1585,7 +1593,7 @@ export const createAppointment = onCall(async (request) => {
           branchId,
         },
       ],
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     }, { merge: false });
   });
 
@@ -1628,7 +1636,7 @@ export const updateAppointmentStatus = onCall(async (request) => {
 
   const updates: Record<string, unknown> = {
     status: newStatus,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   };
 
   if (newStatus === 'completed') {
@@ -1636,7 +1644,7 @@ export const updateAppointmentStatus = onCall(async (request) => {
       const crypto = await import('crypto');
       updates.reviewToken = crypto.randomBytes(16).toString('hex');
     }
-    updates.completedAt = admin.firestore.FieldValue.serverTimestamp();
+    updates.completedAt = FieldValue.serverTimestamp();
   }
 
   await apptRef.update(updates);
@@ -1719,8 +1727,8 @@ export const autoNoshow = onSchedule(
             return false;
           }
 
-          let clientSnap: admin.firestore.DocumentSnapshot | null = null;
-          let clientRef: admin.firestore.DocumentReference | null = null;
+          let clientSnap: DocumentSnapshot | null = null;
+          let clientRef: DocumentReference | null = null;
 
           if (clientId) {
             clientRef = db.doc('tenants/' + tenantId + '/clients/' + clientId);
@@ -1729,8 +1737,8 @@ export const autoNoshow = onSchedule(
 
           tx.update(appointmentRef, {
             status: 'noshow',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            processedEvents: admin.firestore.FieldValue.arrayUnion(eventId),
+            updatedAt: FieldValue.serverTimestamp(),
+            processedEvents: FieldValue.arrayUnion(eventId),
           });
 
           if (clientRef && clientSnap?.exists) {
@@ -1832,7 +1840,7 @@ export const sendNotificationTask = onTaskDispatched(
       status: 'pending',
       attemptsCount: 0,
       processedForBilling: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       expireAt,
     });
 
@@ -1842,7 +1850,7 @@ export const sendNotificationTask = onTaskDispatched(
 
     await notifRef.update({
       status: 'sent',
-      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      sentAt: FieldValue.serverTimestamp(),
       attemptsCount: 1,
     });
   }
@@ -1897,7 +1905,7 @@ export const generateMasterToken = onCall(async (request) => {
 
   await masterRef.update({
     accessToken: token,
-    accessTokenGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
+    accessTokenGeneratedAt: FieldValue.serverTimestamp(),
   });
 
   return { success: true, token };
@@ -2026,7 +2034,7 @@ export const submitReview = onCall(
       masterId,
       clientId: appt.clientId,
       rating,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
 
     await apptDoc.ref.update({ reviewSubmitted: true, reviewRating: rating });
@@ -2087,7 +2095,7 @@ export const uploadMasterPhoto = onCall(
     const tenantId = pathParts[1];
     const masterId = masterDoc.id;
 
-    const bucket = admin.storage().bucket();
+    const bucket = getStorage().bucket();
     const filePath = 'master-photos/' + tenantId + '/' + masterId + '.jpg';
     const file = bucket.file(filePath);
 
@@ -2149,7 +2157,7 @@ export const uploadServiceIcon = onCall(
       throw new HttpsError('not-found', 'Service not found');
     }
 
-    const bucket = admin.storage().bucket();
+    const bucket = getStorage().bucket();
     const path = 'service-icons/' + tenantId + '/' + serviceId + '.png';
     const file = bucket.file(path);
 
@@ -2211,7 +2219,7 @@ export const uploadCategoryIcon = onCall(
       throw new HttpsError('not-found', 'Category not found');
     }
 
-    const bucket = admin.storage().bucket();
+    const bucket = getStorage().bucket();
     const path = 'category-icons/' + tenantId + '/' + categoryId + '.png';
     const file = bucket.file(path);
 
@@ -2403,7 +2411,7 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
     if (!clientSnap.exists) throw new HttpsError('internal', 'Client index is invalid');
     const existing = clientSnap.data()!;
     if (existing.name !== primaryName && !(existing.nameVariants || []).includes(primaryName)) {
-      await clientRef.update({ nameVariants: admin.firestore.FieldValue.arrayUnion(primaryName) });
+      await clientRef.update({ nameVariants: FieldValue.arrayUnion(primaryName) });
     }
   } else {
     const newClientRef = db.collection('tenants/' + tenantId + '/clients').doc();
@@ -2418,8 +2426,8 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
       noshowCount: 0,
       isBlocked: false,
       marketingOptOut: false,
-      consentGivenAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      consentGivenAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       _schemaVersion: 4,
     });
     batch.set(phoneIdxRef, { clientId });
@@ -2436,13 +2444,13 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
   const groupSize = resolved.length;
 
   const appointmentRefs = resolved.map(() => db.collection('tenants/' + tenantId + '/appointments').doc());
-  const ledgerRefs = new Map<string, admin.firestore.DocumentReference>();
+  const ledgerRefs = new Map<string, DocumentReference>();
   for (const mId of indicesByMaster.keys()) {
     ledgerRefs.set(mId, db.doc('tenants/' + tenantId + '/ledger/' + mId + '_' + date));
   }
 
   await db.runTransaction(async (tx) => {
-    const ledgerSnaps = new Map<string, admin.firestore.DocumentSnapshot>();
+    const ledgerSnaps = new Map<string, DocumentSnapshot>();
     for (const [mId, ref] of ledgerRefs) {
       ledgerSnaps.set(mId, await tx.get(ref));
     }
@@ -2476,7 +2484,7 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
         status: 'confirmed',
         source: 'widget',
         processedEvents: [],
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         _schemaVersion: 4,
         groupId,
         groupIndex: i + 1,
@@ -2503,7 +2511,7 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
         masterId: mId,
         date,
         slots: [...existingSlots, ...newSlots],
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       }, { merge: false });
     }
   });
@@ -2533,7 +2541,7 @@ export const cancelAppointmentGroup = onCall(async (request) => {
   if (apptsSnap.empty) throw new HttpsError('not-found', 'Group not found');
 
   const toCancel: Array<{
-    ref: admin.firestore.DocumentReference;
+    ref: DocumentReference;
     masterId: string;
     date: string;
     id: string;
@@ -2566,7 +2574,7 @@ export const cancelAppointmentGroup = onCall(async (request) => {
   }
 
   await db.runTransaction(async (tx) => {
-    const ledgerSnaps = new Map<string, admin.firestore.DocumentSnapshot>();
+    const ledgerSnaps = new Map<string, DocumentSnapshot>();
     for (const key of ledgerKeys) {
       const ref = db.doc('tenants/' + tenantId + '/ledger/' + key);
       ledgerSnaps.set(key, await tx.get(ref));
@@ -2575,7 +2583,7 @@ export const cancelAppointmentGroup = onCall(async (request) => {
     for (const c of toCancel) {
       tx.update(c.ref, {
         status: 'cancelled',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
     }
 
@@ -2673,7 +2681,7 @@ export const createGroupAppointment = onCall(async (request) => {
       const existing = clientSnap.data()!;
       if (existing.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
       if (existing.name !== clientNameInput && !(existing.nameVariants || []).includes(clientNameInput)) {
-        await clientRef.update({ nameVariants: admin.firestore.FieldValue.arrayUnion(clientNameInput) });
+        await clientRef.update({ nameVariants: FieldValue.arrayUnion(clientNameInput) });
       }
       clientPhone = phoneNormalized;
     } else {
@@ -2689,8 +2697,8 @@ export const createGroupAppointment = onCall(async (request) => {
         noshowCount: 0,
         isBlocked: false,
         marketingOptOut: false,
-        consentGivenAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        consentGivenAt: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         _schemaVersion: 4,
       });
       batch.set(phoneIdxRef, { clientId });
@@ -2771,7 +2779,7 @@ export const createGroupAppointment = onCall(async (request) => {
   }
 
   const uniqueMasterIds = [...new Set(resolved.map((r) => r.masterId))];
-  const ledgerRefs = new Map<string, admin.firestore.DocumentReference>();
+  const ledgerRefs = new Map<string, DocumentReference>();
   for (const mId of uniqueMasterIds) {
     ledgerRefs.set(mId, db.doc('tenants/' + tenantId + '/ledger/' + mId + '_' + date));
   }
@@ -2783,7 +2791,7 @@ export const createGroupAppointment = onCall(async (request) => {
   const appointmentRefs = resolved.map(() => db.collection('tenants/' + tenantId + '/appointments').doc());
 
   await db.runTransaction(async (tx) => {
-    const ledgerSnaps = new Map<string, admin.firestore.DocumentSnapshot>();
+    const ledgerSnaps = new Map<string, DocumentSnapshot>();
     for (const [mId, ref] of ledgerRefs) {
       ledgerSnaps.set(mId, await tx.get(ref));
     }
@@ -2817,7 +2825,7 @@ export const createGroupAppointment = onCall(async (request) => {
         status: 'confirmed',
         source,
         processedEvents: [],
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         _schemaVersion: 4,
         groupId,
         groupIndex: i + 1,
@@ -2847,7 +2855,7 @@ export const createGroupAppointment = onCall(async (request) => {
         masterId: mId,
         date,
         slots: [...existingSlots, ...newSlots],
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       }, { merge: false });
     }
   });
