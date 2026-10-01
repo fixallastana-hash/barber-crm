@@ -469,7 +469,7 @@ function PersonCard({ idx, person, services, masters, slots, onUpdate, onToggleS
               </span>
               {slots.length === 0 ? (
                 <p className="text-xs text-gray-500">
-                  Нажмите «Найти свободное время» наверху.
+                  Нажмите «Найти свободное время» ниже.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
