@@ -987,6 +987,25 @@ function dayOfWeekKey(dateStr: string): string {
   return days[d.getUTCDay()];
 }
 
+const TENANT_TZ = 'Asia/Almaty';
+
+function nowInTenantTimezone(timezone: string): { dateStr: string; minutes: number } {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || '00';
+  const dateStr = `${get('year')}-${get('month')}-${get('day')}`;
+  const minutes = parseInt(get('hour'), 10) * 60 + parseInt(get('minute'), 10);
+  return { dateStr, minutes };
+}
+
 function validateWidgetSlug(slug: unknown): asserts slug is string {
   if (typeof slug !== 'string' || !slug.trim()) {
     throw new HttpsError('invalid-argument', 'slug required');
@@ -1152,10 +1171,19 @@ export const widgetGetSlots = onCall({ invoker: 'public' }, async (request) => {
   const bookedSlots: Array<{ start: number; end: number }> = ledgerSnap.exists
     ? (ledgerSnap.data()!.slots || [])
     : [];
+
+  const nowInfo = nowInTenantTimezone(TENANT_TZ);
+  const isToday = date === nowInfo.dateStr;
+  const minStart = isToday ? nowInfo.minutes : -1;
+
   const slots: Array<{ start: number; end: number; time: string }> = [];
   for (const shift of shifts) {
     let cursor = shift.start;
     while (cursor + durationMinutes <= shift.end) {
+      if (isToday && cursor < minStart) {
+        cursor += 15;
+        continue;
+      }
       const slotEnd = cursor + durationMinutes;
       const overlaps = bookedSlots.some((b) => !(slotEnd <= b.start || cursor >= b.end));
       if (!overlaps) {
@@ -1414,11 +1442,19 @@ export const getAvailableSlots = onCall(async (request) => {
     ? (ledgerSnap.data()!.slots || [])
     : [];
 
+  const nowInfo = nowInTenantTimezone(TENANT_TZ);
+  const isToday = date === nowInfo.dateStr;
+  const minStart = isToday ? nowInfo.minutes : -1;
+
   const slots: Array<{ start: number; end: number; branchId: string; time: string }> = [];
 
   for (const shift of shifts) {
     let cursor = shift.start;
     while (cursor + durationMinutes <= shift.end) {
+      if (isToday && cursor < minStart) {
+        cursor += 15;
+        continue;
+      }
       const slotEnd = cursor + durationMinutes;
       const overlaps = bookedSlots.some(
         (b) => !(slotEnd <= b.start || cursor >= b.end)
@@ -2193,6 +2229,7 @@ export const uploadCategoryIcon = onCall(
     return { iconUrl };
   },
 );
+
 // ============ widgetCreateGroupAppointment (public) ============
 
 type GroupPersonInput = {
@@ -2554,6 +2591,7 @@ export const cancelAppointmentGroup = onCall(async (request) => {
 
   return { success: true, cancelled: toCancel.length };
 });
+
 // ============ createGroupAppointment (admin) ============
 
 type AdminGroupPersonInput = {
