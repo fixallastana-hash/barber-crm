@@ -3011,3 +3011,124 @@ export const createGroupAppointment = onCall(async (request) => {
     clientId,
   };
 });
+// ============ getFinancialReport (owner only) ============
+
+export const getFinancialReport = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  if (role !== 'owner') {
+    throw new HttpsError('permission-denied', 'Only owner allowed');
+  }
+
+  const data = request.data || {};
+  const dateFrom = typeof data.dateFrom === 'string' ? data.dateFrom : '';
+  const dateTo = typeof data.dateTo === 'string' ? data.dateTo : '';
+  const masterIdFilter = typeof data.masterId === 'string' && data.masterId ? data.masterId : '';
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+    throw new HttpsError('invalid-argument', 'dateFrom and dateTo must be YYYY-MM-DD');
+  }
+  if (dateFrom > dateTo) {
+    throw new HttpsError('invalid-argument', 'dateFrom must be <= dateTo');
+  }
+
+  let query: any = db
+    .collection('tenants/' + tenantId + '/financialLedger')
+    .where('date', '>=', dateFrom)
+    .where('date', '<=', dateTo);
+
+  if (masterIdFilter) {
+    query = query.where('masterId', '==', masterIdFilter);
+  }
+
+  const snap = await query.get();
+
+  type Entry = {
+    date: string;
+    masterId: string;
+    masterName: string;
+    totalPriceKzt: number;
+    masterEarningKzt: number;
+    salonRevenueKzt: number;
+    compensationMissing: boolean;
+  };
+
+  const entries: Entry[] = snap.docs.map((d: any) => {
+    const v = d.data();
+    return {
+      date: (v.date as string) || '',
+      masterId: (v.masterId as string) || '',
+      masterName: (v.masterName as string) || '—',
+      totalPriceKzt: Number(v.totalPriceKzt) || 0,
+      masterEarningKzt: Number(v.masterEarningKzt) || 0,
+      salonRevenueKzt: Number(v.salonRevenueKzt) || 0,
+      compensationMissing: v.compensationMissing === true,
+    };
+  });
+
+  const totals = {
+    totalPriceKzt: 0,
+    masterEarningKzt: 0,
+    salonRevenueKzt: 0,
+    appointmentsCount: entries.length,
+    compensationMissingCount: 0,
+  };
+
+  const byMasterMap = new Map<string, {
+    masterId: string;
+    masterName: string;
+    appointmentsCount: number;
+    totalPriceKzt: number;
+    masterEarningKzt: number;
+    salonRevenueKzt: number;
+  }>();
+
+  const byDayMap = new Map<string, {
+    date: string;
+    appointmentsCount: number;
+    totalPriceKzt: number;
+    masterEarningKzt: number;
+    salonRevenueKzt: number;
+  }>();
+
+  for (const e of entries) {
+    totals.totalPriceKzt += e.totalPriceKzt;
+    totals.masterEarningKzt += e.masterEarningKzt;
+    totals.salonRevenueKzt += e.salonRevenueKzt;
+    if (e.compensationMissing) totals.compensationMissingCount += 1;
+
+    const m = byMasterMap.get(e.masterId) || {
+      masterId: e.masterId,
+      masterName: e.masterName,
+      appointmentsCount: 0,
+      totalPriceKzt: 0,
+      masterEarningKzt: 0,
+      salonRevenueKzt: 0,
+    };
+    m.appointmentsCount += 1;
+    m.totalPriceKzt += e.totalPriceKzt;
+    m.masterEarningKzt += e.masterEarningKzt;
+    m.salonRevenueKzt += e.salonRevenueKzt;
+    if (e.masterName !== '—') m.masterName = e.masterName;
+    byMasterMap.set(e.masterId, m);
+
+    const day = byDayMap.get(e.date) || {
+      date: e.date,
+      appointmentsCount: 0,
+      totalPriceKzt: 0,
+      masterEarningKzt: 0,
+      salonRevenueKzt: 0,
+    };
+    day.appointmentsCount += 1;
+    day.totalPriceKzt += e.totalPriceKzt;
+    day.masterEarningKzt += e.masterEarningKzt;
+    day.salonRevenueKzt += e.salonRevenueKzt;
+    byDayMap.set(e.date, day);
+  }
+
+  const byMaster = [...byMasterMap.values()].sort(
+    (a, b) => b.salonRevenueKzt - a.salonRevenueKzt,
+  );
+  const byDay = [...byDayMap.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  return { totals, byMaster, byDay };
+});

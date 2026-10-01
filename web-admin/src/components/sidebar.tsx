@@ -17,6 +17,7 @@ const baseItems = [
 const ownerItems = [
   { href: '/app', label: 'Главная', icon: 'home' },
   ...baseItems,
+  { href: '/app/finance', label: 'Финансы', icon: 'finance' },
   { href: '/app/users', label: 'Пользователи', icon: 'users' },
 ];
 
@@ -40,6 +41,7 @@ function Icon({ name }: { name: string }) {
   if (name === 'masters') return <svg {...common}><circle cx="12" cy="8" r="3.5" /><path d="M5 21a7 7 0 0 1 14 0" /></svg>;
   if (name === 'services') return <svg {...common}><path d="m14.5 5.5 4-4 4 4-4 4" /><path d="M18.5 5.5 10 14" /><path d="M4 20h8" /><path d="M4 16h4" /></svg>;
   if (name === 'clients') return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 5.5a3 3 0 0 1 0 5.8M18 14a5 5 0 0 1 3 4.5" /></svg>;
+  if (name === 'finance') return <svg {...common}><path d="M12 2v20" /><path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>;
   return <svg {...common}><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3 21a6 6 0 0 1 12 0M15 20a5 5 0 0 1 6 0" /></svg>;
 }
 
