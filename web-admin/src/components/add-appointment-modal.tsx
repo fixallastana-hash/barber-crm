@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
+import { AddGroupAppointmentForm } from '@/components/add-group-appointment-form';
 
 type Props = {
   isOpen: boolean;
@@ -15,9 +16,11 @@ type Props = {
 };
 
 type Client = { id: string; name: string; phoneNormalized?: string; isBlocked?: boolean };
-type Service = { id: string; name: string; durationMinutes: number; priceKzt: number; isActive: boolean };
-type Master = { id: string; name: string; isActive: boolean };
+type Service = { id: string; name: string; durationMinutes: number; priceKzt: number; isActive: boolean; bufferMinutes?: number };
+type Master = { id: string; name: string; isActive: boolean; serviceIds?: string[] };
 type Slot = { start: number; end: number; branchId: string; time?: string };
+
+type Mode = 'single' | 'group';
 
 function minutesToTime(minutes: number): string {
   const hours = Math.floor(minutes / 60);
@@ -26,6 +29,8 @@ function minutesToTime(minutes: number): string {
 }
 
 export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId, initialMasterId, initialDate }: Props) {
+  const [mode, setMode] = useState<Mode>('single');
+
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [masters, setMasters] = useState<Master[]>([]);
@@ -50,6 +55,8 @@ export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId, init
     if (!isOpen) return;
     setMasterId(initialMasterId || '');
     setDate(initialDate || '');
+    setMode('single');
+    setError('');
   }, [isOpen, initialMasterId, initialDate]);
 
   useEffect(() => {
@@ -149,15 +156,45 @@ export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId, init
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="appointment-modal-title"
         className="my-8 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <h2 id="appointment-modal-title" className="text-xl font-bold">Новая запись</h2>
           <button type="button" onClick={onClose} aria-label="Закрыть"
             className="rounded p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800">✕</button>
         </div>
 
-        {error && <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        {loadingLists ? <p>Загрузка данных...</p> : (
+        <div className="mb-5 flex gap-1 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setMode('single')}
+            className={
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ' +
+              (mode === 'single'
+                ? 'border-black text-black'
+                : 'border-transparent text-gray-500 hover:text-gray-800')
+            }
+          >
+            Один
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('group')}
+            className={
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ' +
+              (mode === 'group'
+                ? 'border-black text-black'
+                : 'border-transparent text-gray-500 hover:text-gray-800')
+            }
+          >
+            Несколько (2–6)
+          </button>
+        </div>
+
+        {loadingLists ? (
+          <p className="text-sm text-gray-500">Загрузка данных...</p>
+        ) : mode === 'single' ? (
           <div className="space-y-5">
+            {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
             <label className="block">
               <span className="mb-1 block text-sm font-medium text-gray-700">1. Клиент</span>
               <select value={clientId} onChange={(event) => setClientId(event.target.value)}
@@ -217,6 +254,16 @@ export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId, init
               {saving && <p className="mt-2 text-sm text-gray-500">Создание записи...</p>}
             </section>
           </div>
+        ) : (
+          <AddGroupAppointmentForm
+            tenantId={tenantId}
+            clients={clients}
+            services={services}
+            masters={masters}
+            initialDate={initialDate}
+            onCreated={onCreated}
+            onClose={onClose}
+          />
         )}
       </div>
     </div>
