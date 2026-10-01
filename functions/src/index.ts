@@ -1600,6 +1600,71 @@ export const createAppointment = onCall(async (request) => {
   return { success: true, appointmentId: appointmentRef.id };
 });
 
+// ============ Financial Ledger helpers ============
+
+type CompensationData = {
+  type?: 'employee' | 'renter';
+  baseSalaryKzt?: number;
+  commissionPercent?: number;
+  bonusKzt?: number;
+  rentType?: 'fixed' | 'percentage';
+  fixedAmountKzt?: number;
+  percentageOfRevenue?: number;
+};
+
+function calculateEarnings(
+  compensation: CompensationData | null,
+  totalPriceKzt: number,
+): {
+  masterEarningKzt: number;
+  salonRevenueKzt: number;
+  compensationMissing: boolean;
+} {
+  const total = Math.max(0, Math.round(Number(totalPriceKzt) || 0));
+
+  if (!compensation || !compensation.type) {
+    return {
+      masterEarningKzt: 0,
+      salonRevenueKzt: total,
+      compensationMissing: true,
+    };
+  }
+
+  if (compensation.type === 'employee') {
+    const commissionPercent = Math.max(0, Math.min(100, Number(compensation.commissionPercent) || 0));
+    const masterEarningKzt = Math.round((total * commissionPercent) / 100);
+    return {
+      masterEarningKzt,
+      salonRevenueKzt: total - masterEarningKzt,
+      compensationMissing: false,
+    };
+  }
+
+  if (compensation.type === 'renter') {
+    if (compensation.rentType === 'percentage') {
+      const percentage = Math.max(0, Math.min(100, Number(compensation.percentageOfRevenue) || 0));
+      const salonRevenueKzt = Math.round((total * percentage) / 100);
+      return {
+        masterEarningKzt: total - salonRevenueKzt,
+        salonRevenueKzt,
+        compensationMissing: false,
+      };
+    }
+    // renter + fixed — аренда фиксированная, платится отдельно от визита
+    return {
+      masterEarningKzt: total,
+      salonRevenueKzt: 0,
+      compensationMissing: false,
+    };
+  }
+
+  return {
+    masterEarningKzt: 0,
+    salonRevenueKzt: total,
+    compensationMissing: true,
+  };
+}
+
 // ============ updateAppointmentStatus ============
 
 export const updateAppointmentStatus = onCall(async (request) => {
@@ -1617,52 +1682,101 @@ export const updateAppointmentStatus = onCall(async (request) => {
   }
 
   const apptRef = db.doc('tenants/' + tenantId + '/appointments/' + appointmentId);
-  const apptSnap = await apptRef.get();
-  if (!apptSnap.exists) throw new HttpsError('not-found', 'Appointment not found');
-  const appt = apptSnap.data()!;
-  const oldStatus = appt.status;
 
-  const allowedTransitions: Record<string, string[]> = {
-    pending: ['confirmed', 'cancelled'],
-    confirmed: ['completed', 'cancelled', 'noshow'],
-    noshow: ['completed'],
-  };
-  if (!(allowedTransitions[oldStatus] || []).includes(newStatus)) {
-    throw new HttpsError(
-      'failed-precondition',
-      `Invalid status transition: ${oldStatus} → ${newStatus}`,
-    );
-  }
+  const result = await db.runTransaction(async (tx) => {
+    const apptSnap = await tx.get(apptRef);
+    if (!apptSnap.exists) throw new HttpsError('not-found', 'Appointment not found');
 
-  const updates: Record<string, unknown> = {
-    status: newStatus,
-    updatedAt: FieldValue.serverTimestamp(),
-  };
+    const appt = apptSnap.data()!;
+    const oldStatus = appt.status;
 
-  if (newStatus === 'completed') {
-    if (!appt.reviewToken) {
-      const crypto = await import('crypto');
-      updates.reviewToken = crypto.randomBytes(16).toString('hex');
-    }
-    updates.completedAt = FieldValue.serverTimestamp();
-  }
-
-  await apptRef.update(updates);
-
-  if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
-    const ledgerRef = db.doc(
-      'tenants/' + tenantId + '/ledger/' + appt.masterId + '_' + appt.date
-    );
-    const ledgerSnap = await ledgerRef.get();
-    if (ledgerSnap.exists) {
-      const slots = (ledgerSnap.data()!.slots || []).filter(
-        (s: { appointmentId?: string }) => s.appointmentId !== appointmentId
+    const allowedTransitions: Record<string, string[]> = {
+      pending: ['confirmed', 'cancelled'],
+      confirmed: ['completed', 'cancelled', 'noshow'],
+      noshow: ['completed'],
+    };
+    if (!(allowedTransitions[oldStatus] || []).includes(newStatus)) {
+      throw new HttpsError(
+        'failed-precondition',
+        `Invalid status transition: ${oldStatus} → ${newStatus}`,
       );
-      await ledgerRef.update({ slots });
     }
-  }
 
-  return { success: true };
+    const updates: Record<string, unknown> = {
+      status: newStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (newStatus === 'completed') {
+      if (!appt.reviewToken) {
+        const crypto = await import('crypto');
+        updates.reviewToken = crypto.randomBytes(16).toString('hex');
+      }
+      updates.completedAt = FieldValue.serverTimestamp();
+    }
+
+    tx.update(apptRef, updates);
+
+    if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
+      const ledgerRef = db.doc(
+        'tenants/' + tenantId + '/ledger/' + appt.masterId + '_' + appt.date,
+      );
+      const ledgerSnap = await tx.get(ledgerRef);
+      if (ledgerSnap.exists) {
+        const slots = (ledgerSnap.data()!.slots || []).filter(
+          (s: { appointmentId?: string }) => s.appointmentId !== appointmentId,
+        );
+        tx.update(ledgerRef, { slots });
+      }
+    }
+
+    if (newStatus === 'completed' && oldStatus !== 'completed') {
+      const masterId = appt.masterId as string;
+      const compensationRef = db.doc(
+        'tenants/' + tenantId + '/masters/' + masterId + '/private/compensation',
+      );
+      const compensationSnap = await tx.get(compensationRef);
+      const compensation = compensationSnap.exists
+        ? (compensationSnap.data() as CompensationData)
+        : null;
+
+      const totalPriceKzt = Number(appt.totalPriceKzt) || 0;
+      const earnings = calculateEarnings(compensation, totalPriceKzt);
+
+      const entryRef = db.collection('tenants/' + tenantId + '/financialLedger').doc();
+      tx.set(entryRef, {
+        appointmentId,
+        masterId,
+        masterName: appt.masterName || '',
+        clientId: appt.clientId || '',
+        clientName: appt.clientName || '',
+        date: appt.date || '',
+        completedAt: FieldValue.serverTimestamp(),
+        totalPriceKzt,
+        masterEarningKzt: earnings.masterEarningKzt,
+        salonRevenueKzt: earnings.salonRevenueKzt,
+        compensationMissing: earnings.compensationMissing,
+        compensationSnapshot: compensation
+          ? {
+              type: compensation.type || null,
+              commissionPercent: compensation.commissionPercent ?? null,
+              rentType: compensation.rentType ?? null,
+              percentageOfRevenue: compensation.percentageOfRevenue ?? null,
+              fixedAmountKzt: compensation.fixedAmountKzt ?? null,
+              baseSalaryKzt: compensation.baseSalaryKzt ?? null,
+              bonusKzt: compensation.bonusKzt ?? null,
+            }
+          : null,
+        source: appt.source || 'admin',
+        createdAt: FieldValue.serverTimestamp(),
+        _schemaVersion: 4,
+      });
+    }
+
+    return { success: true, changed: true };
+  });
+
+  return result;
 });
 
 // ============ autoNoshow (cron every 30 minutes) ============

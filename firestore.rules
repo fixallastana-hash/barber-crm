@@ -83,6 +83,11 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      match /financialLedger/{entryId} {
+        allow read: if isOwnerOrAdmin(tenantId);
+        allow write: if false;
+      }
+
       match /{document=**} {
         allow read, write: if false;
       }
