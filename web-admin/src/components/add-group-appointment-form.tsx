@@ -19,6 +19,15 @@ type Person = {
 const MAX_PEOPLE = 6;
 const MIN_PEOPLE = 2;
 
+const PERSON_COLORS = [
+  { border: '#60a5fa', badge: 'bg-blue-100 text-blue-800' },
+  { border: '#c084fc', badge: 'bg-purple-100 text-purple-800' },
+  { border: '#4ade80', badge: 'bg-green-100 text-green-800' },
+  { border: '#fb923c', badge: 'bg-orange-100 text-orange-800' },
+  { border: '#f472b6', badge: 'bg-pink-100 text-pink-800' },
+  { border: '#2dd4bf', badge: 'bg-teal-100 text-teal-800' },
+];
+
 type Props = {
   tenantId: string;
   clients: Client[];
@@ -86,14 +95,56 @@ export function AddGroupAppointmentForm({
 
   const isNewClient = phoneValid && !matchedClient;
 
+  const durationOf = useMemo(
+    () => (serviceIds: string[]): number =>
+      serviceIds.reduce((sum, sid) => {
+        const s = services.find((x) => x.id === sid);
+        return sum + (s ? s.durationMinutes + (s.bufferMinutes || 0) : 0);
+      }, 0),
+    [services]
+  );
+
+  const minStartByPerson = useMemo(() => {
+    const result: (number | undefined)[] = [];
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i];
+      if (!p.masterId) {
+        result.push(undefined);
+        continue;
+      }
+      let minStart: number | undefined = undefined;
+      for (let j = 0; j < i; j++) {
+        const prev = people[j];
+        if (prev.masterId !== p.masterId) continue;
+        if (prev.selectedStart === null) continue;
+        const prevEnd = prev.selectedStart + durationOf(prev.serviceIds);
+        if (minStart === undefined || prevEnd > minStart) minStart = prevEnd;
+      }
+      result.push(minStart);
+    }
+    return result;
+  }, [people, durationOf]);
+
   const updatePerson = (idx: number, patch: Partial<Person>) => {
-    setPeople((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
-    // Сброс слота при изменении мастера или услуг
     if (patch.masterId !== undefined || patch.serviceIds !== undefined) {
       setSlotsByPerson((prev) => ({ ...prev, [idx]: [] }));
-      setPeople((prev) => prev.map((p, i) => (i === idx ? { ...p, selectedStart: null } : p)));
       setSlotsLoaded(false);
     }
+    setPeople((prev) => {
+      let next = prev.map((p, i) => (i === idx ? { ...p, ...patch } : p));
+      if (patch.selectedStart !== undefined && patch.selectedStart !== null) {
+        const changed = next[idx];
+        const newEnd = patch.selectedStart + durationOf(changed.serviceIds);
+        next = next.map((p, i) => {
+          if (i <= idx) return p;
+          if (p.masterId !== changed.masterId) return p;
+          if (p.selectedStart === null) return p;
+          if (p.selectedStart < newEnd) return { ...p, selectedStart: null };
+          return p;
+        });
+      }
+      return next;
+    });
   };
 
   const addPerson = () => {
@@ -123,14 +174,12 @@ export function AddGroupAppointmentForm({
 
   const isBaseValid = useMemo(() => {
     if (!phoneValid) return false;
-    if (isNewClient && !clientName.trim()) return false;
     for (const p of people) {
-      if (!p.clientName.trim()) return false;
       if (!p.masterId) return false;
       if (!p.serviceIds.length) return false;
     }
     return true;
-  }, [phoneValid, isNewClient, clientName, people]);
+  }, [phoneValid, people]);
 
   const isReadyToSubmit = useMemo(() => {
     if (!isBaseValid) return false;
@@ -153,7 +202,7 @@ export function AddGroupAppointmentForm({
 
   const loadAllSlots = async () => {
     if (!date || !isBaseValid) {
-      setError('Заполните телефон, всех людей, мастеров и услуги');
+      setError('Заполните телефон, мастеров и услуги для всех людей');
       return;
     }
 
@@ -167,10 +216,7 @@ export function AddGroupAppointmentForm({
 
       const results = await Promise.all(
         people.map(async (p, idx) => {
-          const duration = p.serviceIds.reduce((sum, sid) => {
-            const s = services.find((x) => x.id === sid);
-            return sum + (s ? s.durationMinutes + (s.bufferMinutes || 0) : 0);
-          }, 0);
+          const duration = durationOf(p.serviceIds);
           if (!duration) return { idx, slots: [] as Slot[] };
           try {
             const res = await getAvailableSlots({ masterId: p.masterId, date, durationMinutes: duration });
@@ -185,17 +231,6 @@ export function AddGroupAppointmentForm({
       for (const r of results) next[r.idx] = r.slots;
       setSlotsByPerson(next);
       setSlotsLoaded(true);
-
-      // Автовыбор, если у человека только один слот
-      setPeople((prev) =>
-        prev.map((p, idx) => {
-          const list = next[idx] || [];
-          if (list.length === 1 && p.selectedStart === null) {
-            return { ...p, selectedStart: list[0].start };
-          }
-          return p;
-        })
-      );
     } catch {
       setSlotsByPerson({});
       setError('Не удалось загрузить свободное время');
@@ -209,13 +244,18 @@ export function AddGroupAppointmentForm({
     setSaving(true);
     setError('');
     try {
+      const ownerFallback =
+        matchedClient?.name ||
+        clientName.trim() ||
+        `Клиент ${phoneNorm.slice(-4)}`;
+
       const fn = httpsCallable(getFirebaseFunctions(), 'createGroupAppointment');
       await fn({
         ...(matchedClient ? { clientId: matchedClient.id } : {}),
-        ...(isNewClient ? { clientName: clientName.trim(), clientPhone: phoneNorm } : {}),
+        ...(isNewClient ? { clientName: ownerFallback, clientPhone: phoneNorm } : {}),
         date,
-        people: people.map((p) => ({
-          clientName: p.clientName.trim(),
+        people: people.map((p, idx) => ({
+          clientName: p.clientName.trim() || (idx === 0 ? ownerFallback : `Гость ${idx + 1}`),
           masterId: p.masterId,
           serviceIds: p.serviceIds,
           startMinutes: p.selectedStart as number,
@@ -246,7 +286,7 @@ export function AddGroupAppointmentForm({
 
       <div className="rounded border border-gray-200 bg-gray-50 p-3">
         <span className="mb-2 block text-sm font-medium text-gray-700">
-          Телефон клиента (кто оплачивает / владелец записи)
+          Телефон клиента
         </span>
         <input
           type="tel"
@@ -267,16 +307,12 @@ export function AddGroupAppointmentForm({
         )}
 
         {phoneValid && !matchedClient && (
-          <div className="mt-2 space-y-2">
-            <div className="flex items-start gap-2 rounded border border-yellow-200 bg-yellow-50 p-2.5 text-sm text-yellow-800">
-              <span className="mt-0.5">⚠</span>
-              <span>Клиент с таким номером не найден. Будет создан автоматически.</span>
-            </div>
+          <div className="mt-2">
             <input
               type="text"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              placeholder="Имя нового клиента"
+              placeholder="Имя нового клиента (не обязательно)"
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
             />
           </div>
@@ -296,6 +332,7 @@ export function AddGroupAppointmentForm({
             services={services}
             masters={masters}
             slots={slotsByPerson[idx] || []}
+            minStart={minStartByPerson[idx]}
             onUpdate={updatePerson}
             onToggleService={togglePersonService}
             onRemove={people.length > MIN_PEOPLE ? () => removePerson(idx) : undefined}
@@ -314,7 +351,7 @@ export function AddGroupAppointmentForm({
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-gray-700">Дата (общая для всех)</span>
+        <span className="mb-1 block text-sm font-medium text-gray-700">Дата</span>
         <input
           type="date"
           value={date}
@@ -334,14 +371,8 @@ export function AddGroupAppointmentForm({
         disabled={!isBaseValid || !date || loadingSlots}
         className="w-full rounded bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-200 disabled:opacity-50"
       >
-        {loadingSlots ? 'Поиск свободного времени для каждого…' : slotsLoaded ? 'Обновить свободное время' : 'Найти свободное время'}
+        {loadingSlots ? 'Поиск…' : slotsLoaded ? 'Обновить свободное время' : 'Найти свободное время'}
       </button>
-
-      {!isBaseValid && (
-        <p className="text-sm text-gray-500">
-          Заполните телефон, имена всех людей, мастеров и услуги.
-        </p>
-      )}
 
       {isBaseValid && slotsLoaded && (
         <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm">
@@ -368,7 +399,7 @@ export function AddGroupAppointmentForm({
         disabled={!isReadyToSubmit || saving}
         className="w-full rounded bg-black px-4 py-3 text-base font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
       >
-        {saving ? 'Создание группы…' : `Создать группу (${people.length})`}
+        {saving ? 'Создание…' : `Создать группу (${people.length})`}
       </button>
     </div>
   );
@@ -380,23 +411,30 @@ type PersonCardProps = {
   services: Service[];
   masters: Master[];
   slots: Slot[];
+  minStart?: number;
   onUpdate: (idx: number, patch: Partial<Person>) => void;
   onToggleService: (idx: number, serviceId: string) => void;
   onRemove?: () => void;
 };
 
-function PersonCard({ idx, person, services, masters, slots, onUpdate, onToggleService, onRemove }: PersonCardProps) {
+function PersonCard({ idx, person, services, masters, slots, minStart, onUpdate, onToggleService, onRemove }: PersonCardProps) {
   const [expanded, setExpanded] = useState(true);
+  const color = PERSON_COLORS[idx % PERSON_COLORS.length];
 
   const eligibleMasters = useMemo(() => {
     if (!person.serviceIds.length) return masters;
     return masters.filter((m) => m.serviceIds?.some((id) => person.serviceIds.includes(id)));
   }, [masters, person.serviceIds]);
 
+  const hasSlots = slots.length > 0;
+  const showSlotGrid = person.masterId && person.serviceIds.length > 0;
+
   return (
-    <div className="rounded border border-gray-200 bg-white p-3">
+    <div className="rounded border-2 bg-white p-3" style={{ borderColor: color.border }}>
       <div className="mb-2 flex items-center justify-between">
-        <b className="text-sm font-semibold">Человек {idx + 1}</b>
+        <span className={'inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ' + color.badge}>
+          Человек {idx + 1}
+        </span>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -423,7 +461,7 @@ function PersonCard({ idx, person, services, masters, slots, onUpdate, onToggleS
             type="text"
             value={person.clientName}
             onChange={(e) => onUpdate(idx, { clientName: e.target.value })}
-            placeholder="Имя"
+            placeholder="Имя (не обязательно)"
             className="w-full rounded border px-3 py-2 text-sm"
           />
 
@@ -460,39 +498,39 @@ function PersonCard({ idx, person, services, masters, slots, onUpdate, onToggleS
             })}
           </div>
 
-          {person.masterId && person.serviceIds.length > 0 && (
+          {showSlotGrid && hasSlots && (
             <div className="mt-2 border-t border-gray-100 pt-2">
-              <span className="mb-1.5 block text-xs font-medium text-gray-600">
-                {person.selectedStart !== null
-                  ? `Выбрано: ${minutesToTime(person.selectedStart)}`
-                  : 'Выберите время'}
-              </span>
-              {slots.length === 0 ? (
-                <p className="text-xs text-gray-500">
-                  Нажмите «Найти свободное время» ниже.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {slots.map((s) => {
-                    const active = person.selectedStart === s.start;
+              <div className="flex flex-wrap gap-1.5">
+                {slots.map((s) => {
+                  const active = person.selectedStart === s.start;
+                  const disabled = minStart !== undefined && s.start < minStart;
+                  if (disabled) {
                     return (
-                      <button
+                      <span
                         key={s.start}
-                        type="button"
-                        onClick={() => onUpdate(idx, { selectedStart: active ? null : s.start })}
-                        className={
-                          'rounded border px-3 py-1.5 text-xs font-medium transition ' +
-                          (active
-                            ? 'border-black bg-black text-white'
-                            : 'border-gray-300 bg-white text-gray-700 hover:border-black')
-                        }
+                        className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-300 opacity-40 select-none"
                       >
                         {s.time || minutesToTime(s.start)}
-                      </button>
+                      </span>
                     );
-                  })}
-                </div>
-              )}
+                  }
+                  return (
+                    <button
+                      key={s.start}
+                      type="button"
+                      onClick={() => onUpdate(idx, { selectedStart: active ? null : s.start })}
+                      className={
+                        'rounded border px-3 py-1.5 text-xs font-medium transition ' +
+                        (active
+                          ? 'border-black bg-black text-white'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-black')
+                      }
+                    >
+                      {s.time || minutesToTime(s.start)}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

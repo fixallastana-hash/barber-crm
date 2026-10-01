@@ -2778,6 +2778,28 @@ export const createGroupAppointment = onCall(async (request) => {
     });
   }
 
+  const slotsByMasterCheck = new Map<string, Array<{ start: number; end: number; clientName: string }>>();
+  for (const r of resolved) {
+    const arr = slotsByMasterCheck.get(r.masterId) || [];
+    arr.push({ start: r.startMinutes, end: r.ledgerEndMinutes, clientName: r.clientName });
+    slotsByMasterCheck.set(r.masterId, arr);
+  }
+  for (const slots of slotsByMasterCheck.values()) {
+    for (let i = 0; i < slots.length; i++) {
+      for (let j = i + 1; j < slots.length; j++) {
+        const a = slots[i];
+        const b = slots[j];
+        const overlap = !(a.end <= b.start || a.start >= b.end);
+        if (overlap) {
+          throw new HttpsError(
+            'failed-precondition',
+            `Гости «${a.clientName}» и «${b.clientName}» пересекаются по времени у одного мастера. Сдвиньте одного из них.`,
+          );
+        }
+      }
+    }
+  }
+
   const uniqueMasterIds = [...new Set(resolved.map((r) => r.masterId))];
   const ledgerRefs = new Map<string, DocumentReference>();
   for (const mId of uniqueMasterIds) {
