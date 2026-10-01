@@ -2554,3 +2554,240 @@ export const cancelAppointmentGroup = onCall(async (request) => {
 
   return { success: true, cancelled: toCancel.length };
 });
+// ============ createGroupAppointment (admin) ============
+
+type AdminGroupPersonInput = {
+  clientName?: string;
+  masterId?: string;
+  serviceIds?: string[];
+};
+
+export const createGroupAppointment = onCall(async (request) => {
+  const { tenantId, role } = requireAuth(request);
+  requireOwnerOrAdmin(role);
+
+  const data = request.data || {};
+  const clientId = typeof data.clientId === 'string' ? data.clientId : '';
+  const date = data.date;
+  const startMinutes = Number(data.startMinutes);
+  const mode: 'same-master' | 'smart' = data.mode;
+  const groupMasterId: string | undefined = data.masterId;
+  const people: AdminGroupPersonInput[] = Array.isArray(data.people) ? data.people : [];
+  const source = typeof data.source === 'string' ? data.source : 'admin';
+
+  if (!clientId) throw new HttpsError('invalid-argument', 'clientId required');
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + 'T12:00:00Z'))) {
+    throw new HttpsError('invalid-argument', 'date required');
+  }
+  if (!Number.isInteger(startMinutes) || startMinutes < 0 || startMinutes >= 1440) {
+    throw new HttpsError('invalid-argument', 'startMinutes required');
+  }
+  if (mode !== 'same-master' && mode !== 'smart') {
+    throw new HttpsError('invalid-argument', 'mode must be same-master or smart');
+  }
+  if (!people.length || people.length > 6) {
+    throw new HttpsError('invalid-argument', 'people must be 1..6');
+  }
+  if (mode === 'same-master' && (typeof groupMasterId !== 'string' || !groupMasterId)) {
+    throw new HttpsError('invalid-argument', 'masterId required for same-master mode');
+  }
+
+  for (const p of people) {
+    const pMasterId = mode === 'same-master' ? groupMasterId : p.masterId;
+    if (typeof p.clientName !== 'string' || !p.clientName.trim()) {
+      throw new HttpsError('invalid-argument', 'clientName required for each person');
+    }
+    if (typeof pMasterId !== 'string' || !pMasterId) {
+      throw new HttpsError('invalid-argument', 'masterId required for each person');
+    }
+    if (!Array.isArray(p.serviceIds) || !p.serviceIds.length) {
+      throw new HttpsError('invalid-argument', 'serviceIds required for each person');
+    }
+  }
+
+  const clientSnap = await db.doc('tenants/' + tenantId + '/clients/' + clientId).get();
+  if (!clientSnap.exists) throw new HttpsError('not-found', 'Client not found');
+  const client = clientSnap.data()!;
+  if (client.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
+  const clientPhone = ((client.phoneNormalized as string) || '').trim();
+
+  const weekday = dayOfWeekKey(date);
+
+  type ResolvedPerson = {
+    clientName: string;
+    masterId: string;
+    masterName: string;
+    serviceIds: string[];
+    serviceNames: string[];
+    durationMinutes: number;
+    totalPrice: number;
+    bufferMinutes: number;
+    branchId: string;
+    startMinutes: number;
+    endMinutes: number;
+    ledgerEndMinutes: number;
+  };
+
+  const resolved: ResolvedPerson[] = [];
+
+  for (const p of people) {
+    const pMasterId = (mode === 'same-master' ? groupMasterId : p.masterId) as string;
+    const pServiceIds = p.serviceIds as string[];
+
+    const serviceSnaps = await Promise.all(
+      pServiceIds.map((id) => db.doc('tenants/' + tenantId + '/services/' + id).get())
+    );
+    if (serviceSnaps.some((s) => !s.exists)) {
+      throw new HttpsError('not-found', 'Service not found');
+    }
+    const services = serviceSnaps.map((s) => s.data()!);
+    if (services.some((s) => s.isActive !== true)) {
+      throw new HttpsError('failed-precondition', 'Service not active');
+    }
+    const durationMinutes = services.reduce((sum, s) => sum + Number(s.durationMinutes || 0), 0);
+    const totalPrice = services.reduce((sum, s) => sum + Number(s.priceKzt || 0), 0);
+    const bufferMinutes = Math.max(...services.map((s) => Number(s.bufferMinutes || 0)), 0);
+    const serviceNames = services.map((s) => s.name as string);
+
+    const masterSnap = await db.doc('tenants/' + tenantId + '/masters/' + pMasterId).get();
+    if (!masterSnap.exists) throw new HttpsError('not-found', 'Master not found');
+    const master = masterSnap.data()!;
+    if (!master.isActive) throw new HttpsError('failed-precondition', 'Master not active');
+    const daySchedule = master.schedule?.[weekday];
+    if (!daySchedule || !daySchedule.isWorking) {
+      throw new HttpsError('failed-precondition', 'Master does not work on this day');
+    }
+
+    resolved.push({
+      clientName: (p.clientName as string).trim(),
+      masterId: pMasterId,
+      masterName: master.name as string,
+      serviceIds: pServiceIds,
+      serviceNames,
+      durationMinutes,
+      totalPrice,
+      bufferMinutes,
+      branchId: '',
+      startMinutes: 0,
+      endMinutes: 0,
+      ledgerEndMinutes: 0,
+    });
+  }
+
+  const indicesByMaster = new Map<string, number[]>();
+  resolved.forEach((r, i) => {
+    const arr = indicesByMaster.get(r.masterId) || [];
+    arr.push(i);
+    indicesByMaster.set(r.masterId, arr);
+  });
+
+  const shiftsByMaster = new Map<string, Array<{ start: number; end: number; branchId?: string }>>();
+  for (const mId of indicesByMaster.keys()) {
+    const mSnap = await db.doc('tenants/' + tenantId + '/masters/' + mId).get();
+    const mData = mSnap.data()!;
+    const daySchedule = mData.schedule?.[weekday];
+    const shifts = (daySchedule?.shifts || []) as Array<{ start: number; end: number; branchId?: string }>;
+    shiftsByMaster.set(mId, shifts);
+  }
+
+  for (const indices of indicesByMaster.values()) {
+    let cursor = startMinutes;
+    for (const i of indices) {
+      const r = resolved[i];
+      r.startMinutes = cursor;
+      r.endMinutes = cursor + r.durationMinutes;
+      r.ledgerEndMinutes = r.endMinutes + r.bufferMinutes;
+      cursor = r.ledgerEndMinutes;
+    }
+  }
+
+  for (const r of resolved) {
+    const shifts = shiftsByMaster.get(r.masterId)!;
+    const shift = shifts.find((s) => r.startMinutes >= s.start && r.endMinutes <= s.end);
+    if (!shift) throw new HttpsError('failed-precondition', 'Outside hours');
+    r.branchId = shift.branchId || '';
+  }
+
+  const crypto = await import('crypto');
+  const groupId = 'g_' + crypto.randomBytes(10).toString('hex');
+  const groupSize = resolved.length;
+
+  const appointmentRefs = resolved.map(() => db.collection('tenants/' + tenantId + '/appointments').doc());
+  const ledgerRefs = new Map<string, admin.firestore.DocumentReference>();
+  for (const mId of indicesByMaster.keys()) {
+    ledgerRefs.set(mId, db.doc('tenants/' + tenantId + '/ledger/' + mId + '_' + date));
+  }
+
+  await db.runTransaction(async (tx) => {
+    const ledgerSnaps = new Map<string, admin.firestore.DocumentSnapshot>();
+    for (const [mId, ref] of ledgerRefs) {
+      ledgerSnaps.set(mId, await tx.get(ref));
+    }
+
+    for (const r of resolved) {
+      const snap = ledgerSnaps.get(r.masterId);
+      const existingSlots: Array<{ start: number; end: number }> = snap && snap.exists
+        ? (snap.data()!.slots || [])
+        : [];
+      const conflict = existingSlots.some(
+        (s) => !(r.ledgerEndMinutes <= s.start || r.startMinutes >= s.end)
+      );
+      if (conflict) throw new HttpsError('aborted', 'slot_taken');
+    }
+
+    resolved.forEach((r, i) => {
+      tx.set(appointmentRefs[i], {
+        branchId: r.branchId,
+        masterId: r.masterId,
+        masterName: r.masterName,
+        clientId,
+        clientName: r.clientName,
+        clientPhone,
+        serviceIds: r.serviceIds,
+        serviceNames: r.serviceNames,
+        date,
+        startMinutes: r.startMinutes,
+        endMinutes: r.endMinutes,
+        durationMinutes: r.durationMinutes,
+        totalPriceKzt: r.totalPrice,
+        status: 'confirmed',
+        source,
+        processedEvents: [],
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        _schemaVersion: 4,
+        groupId,
+        groupIndex: i + 1,
+        groupSize,
+      });
+    });
+
+    for (const [mId, indices] of indicesByMaster) {
+      const snap = ledgerSnaps.get(mId);
+      const existingSlots: Array<{ start: number; end: number }> = snap && snap.exists
+        ? (snap.data()!.slots || [])
+        : [];
+      const newSlots = indices.map((i) => {
+        const r = resolved[i];
+        return {
+          start: r.startMinutes,
+          end: r.ledgerEndMinutes,
+          type: 'appointment',
+          appointmentId: appointmentRefs[i].id,
+          branchId: r.branchId,
+        };
+      });
+      tx.set(ledgerRefs.get(mId)!, {
+        masterId: mId,
+        date,
+        slots: [...existingSlots, ...newSlots],
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: false });
+    }
+  });
+
+  return {
+    success: true,
+    groupId,
+    appointmentIds: appointmentRefs.map((r) => r.id),
+  };
+});
