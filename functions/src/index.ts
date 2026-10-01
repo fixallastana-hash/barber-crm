@@ -2560,56 +2560,106 @@ type AdminGroupPersonInput = {
   clientName?: string;
   masterId?: string;
   serviceIds?: string[];
+  startMinutes?: number;
 };
+
+function normalizePhoneRaw(input: string): string {
+  const digits = input.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('8')) return '+7' + digits.slice(1);
+  if (digits.length === 11 && digits.startsWith('7')) return '+' + digits;
+  if (digits.length === 10) return '+7' + digits;
+  return '+' + digits;
+}
 
 export const createGroupAppointment = onCall(async (request) => {
   const { tenantId, role } = requireAuth(request);
   requireOwnerOrAdmin(role);
 
   const data = request.data || {};
-  const clientId = typeof data.clientId === 'string' ? data.clientId : '';
+  const clientIdInput = typeof data.clientId === 'string' ? data.clientId.trim() : '';
+  const clientNameInput = typeof data.clientName === 'string' ? data.clientName.trim() : '';
+  const clientPhoneInput = typeof data.clientPhone === 'string' ? data.clientPhone.trim() : '';
   const date = data.date;
-  const startMinutes = Number(data.startMinutes);
-  const mode: 'same-master' | 'smart' = data.mode;
-  const groupMasterId: string | undefined = data.masterId;
   const people: AdminGroupPersonInput[] = Array.isArray(data.people) ? data.people : [];
   const source = typeof data.source === 'string' ? data.source : 'admin';
 
-  if (!clientId) throw new HttpsError('invalid-argument', 'clientId required');
+  if (!clientIdInput && !(clientNameInput && clientPhoneInput)) {
+    throw new HttpsError('invalid-argument', 'clientId or (clientName + clientPhone) required');
+  }
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + 'T12:00:00Z'))) {
     throw new HttpsError('invalid-argument', 'date required');
-  }
-  if (!Number.isInteger(startMinutes) || startMinutes < 0 || startMinutes >= 1440) {
-    throw new HttpsError('invalid-argument', 'startMinutes required');
-  }
-  if (mode !== 'same-master' && mode !== 'smart') {
-    throw new HttpsError('invalid-argument', 'mode must be same-master or smart');
   }
   if (!people.length || people.length > 6) {
     throw new HttpsError('invalid-argument', 'people must be 1..6');
   }
-  if (mode === 'same-master' && (typeof groupMasterId !== 'string' || !groupMasterId)) {
-    throw new HttpsError('invalid-argument', 'masterId required for same-master mode');
-  }
 
   for (const p of people) {
-    const pMasterId = mode === 'same-master' ? groupMasterId : p.masterId;
     if (typeof p.clientName !== 'string' || !p.clientName.trim()) {
       throw new HttpsError('invalid-argument', 'clientName required for each person');
     }
-    if (typeof pMasterId !== 'string' || !pMasterId) {
+    if (typeof p.masterId !== 'string' || !p.masterId) {
       throw new HttpsError('invalid-argument', 'masterId required for each person');
     }
     if (!Array.isArray(p.serviceIds) || !p.serviceIds.length) {
       throw new HttpsError('invalid-argument', 'serviceIds required for each person');
     }
+    if (!Number.isInteger(p.startMinutes) || (p.startMinutes as number) < 0 || (p.startMinutes as number) >= 1440) {
+      throw new HttpsError('invalid-argument', 'startMinutes required for each person');
+    }
   }
 
-  const clientSnap = await db.doc('tenants/' + tenantId + '/clients/' + clientId).get();
-  if (!clientSnap.exists) throw new HttpsError('not-found', 'Client not found');
-  const client = clientSnap.data()!;
-  if (client.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
-  const clientPhone = ((client.phoneNormalized as string) || '').trim();
+  let clientId: string;
+  let clientPhone: string;
+
+  if (clientIdInput) {
+    const clientSnap = await db.doc('tenants/' + tenantId + '/clients/' + clientIdInput).get();
+    if (!clientSnap.exists) throw new HttpsError('not-found', 'Client not found');
+    const client = clientSnap.data()!;
+    if (client.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
+    clientId = clientIdInput;
+    clientPhone = ((client.phoneNormalized as string) || '').trim();
+  } else {
+    const digits = clientPhoneInput.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15) {
+      throw new HttpsError('invalid-argument', 'Invalid clientPhone');
+    }
+    const phoneNormalized = normalizePhoneRaw(clientPhoneInput);
+    const phoneIdxRef = db.doc('tenants/' + tenantId + '/clientPhoneIndex/' + phoneNormalized);
+    const phoneIdxSnap = await phoneIdxRef.get();
+
+    if (phoneIdxSnap.exists) {
+      clientId = phoneIdxSnap.data()!.clientId as string;
+      const clientRef = db.doc('tenants/' + tenantId + '/clients/' + clientId);
+      const clientSnap = await clientRef.get();
+      if (!clientSnap.exists) throw new HttpsError('internal', 'Client index is invalid');
+      const existing = clientSnap.data()!;
+      if (existing.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
+      if (existing.name !== clientNameInput && !(existing.nameVariants || []).includes(clientNameInput)) {
+        await clientRef.update({ nameVariants: admin.firestore.FieldValue.arrayUnion(clientNameInput) });
+      }
+      clientPhone = phoneNormalized;
+    } else {
+      const newClientRef = db.collection('tenants/' + tenantId + '/clients').doc();
+      clientId = newClientRef.id;
+      const batch = db.batch();
+      batch.set(newClientRef, {
+        name: clientNameInput,
+        phoneNormalized,
+        nameVariants: [],
+        totalVisits: 0,
+        totalSpentKzt: 0,
+        noshowCount: 0,
+        isBlocked: false,
+        marketingOptOut: false,
+        consentGivenAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        _schemaVersion: 4,
+      });
+      batch.set(phoneIdxRef, { clientId });
+      await batch.commit();
+      clientPhone = phoneNormalized;
+    }
+  }
 
   const weekday = dayOfWeekKey(date);
 
@@ -2631,8 +2681,9 @@ export const createGroupAppointment = onCall(async (request) => {
   const resolved: ResolvedPerson[] = [];
 
   for (const p of people) {
-    const pMasterId = (mode === 'same-master' ? groupMasterId : p.masterId) as string;
+    const pMasterId = p.masterId as string;
     const pServiceIds = p.serviceIds as string[];
+    const pStartMinutes = p.startMinutes as number;
 
     const serviceSnaps = await Promise.all(
       pServiceIds.map((id) => db.doc('tenants/' + tenantId + '/services/' + id).get())
@@ -2658,6 +2709,13 @@ export const createGroupAppointment = onCall(async (request) => {
       throw new HttpsError('failed-precondition', 'Master does not work on this day');
     }
 
+    const endMinutes = pStartMinutes + durationMinutes;
+    const ledgerEndMinutes = endMinutes + bufferMinutes;
+
+    const shifts = (daySchedule.shifts || []) as Array<{ start: number; end: number; branchId?: string }>;
+    const shift = shifts.find((s) => pStartMinutes >= s.start && endMinutes <= s.end);
+    if (!shift) throw new HttpsError('failed-precondition', 'Outside hours');
+
     resolved.push({
       clientName: (p.clientName as string).trim(),
       masterId: pMasterId,
@@ -2667,45 +2725,17 @@ export const createGroupAppointment = onCall(async (request) => {
       durationMinutes,
       totalPrice,
       bufferMinutes,
-      branchId: '',
-      startMinutes: 0,
-      endMinutes: 0,
-      ledgerEndMinutes: 0,
+      branchId: shift.branchId || '',
+      startMinutes: pStartMinutes,
+      endMinutes,
+      ledgerEndMinutes,
     });
   }
 
-  const indicesByMaster = new Map<string, number[]>();
-  resolved.forEach((r, i) => {
-    const arr = indicesByMaster.get(r.masterId) || [];
-    arr.push(i);
-    indicesByMaster.set(r.masterId, arr);
-  });
-
-  const shiftsByMaster = new Map<string, Array<{ start: number; end: number; branchId?: string }>>();
-  for (const mId of indicesByMaster.keys()) {
-    const mSnap = await db.doc('tenants/' + tenantId + '/masters/' + mId).get();
-    const mData = mSnap.data()!;
-    const daySchedule = mData.schedule?.[weekday];
-    const shifts = (daySchedule?.shifts || []) as Array<{ start: number; end: number; branchId?: string }>;
-    shiftsByMaster.set(mId, shifts);
-  }
-
-  for (const indices of indicesByMaster.values()) {
-    let cursor = startMinutes;
-    for (const i of indices) {
-      const r = resolved[i];
-      r.startMinutes = cursor;
-      r.endMinutes = cursor + r.durationMinutes;
-      r.ledgerEndMinutes = r.endMinutes + r.bufferMinutes;
-      cursor = r.ledgerEndMinutes;
-    }
-  }
-
-  for (const r of resolved) {
-    const shifts = shiftsByMaster.get(r.masterId)!;
-    const shift = shifts.find((s) => r.startMinutes >= s.start && r.endMinutes <= s.end);
-    if (!shift) throw new HttpsError('failed-precondition', 'Outside hours');
-    r.branchId = shift.branchId || '';
+  const uniqueMasterIds = [...new Set(resolved.map((r) => r.masterId))];
+  const ledgerRefs = new Map<string, admin.firestore.DocumentReference>();
+  for (const mId of uniqueMasterIds) {
+    ledgerRefs.set(mId, db.doc('tenants/' + tenantId + '/ledger/' + mId + '_' + date));
   }
 
   const crypto = await import('crypto');
@@ -2713,10 +2743,6 @@ export const createGroupAppointment = onCall(async (request) => {
   const groupSize = resolved.length;
 
   const appointmentRefs = resolved.map(() => db.collection('tenants/' + tenantId + '/appointments').doc());
-  const ledgerRefs = new Map<string, admin.firestore.DocumentReference>();
-  for (const mId of indicesByMaster.keys()) {
-    ledgerRefs.set(mId, db.doc('tenants/' + tenantId + '/ledger/' + mId + '_' + date));
-  }
 
   await db.runTransaction(async (tx) => {
     const ledgerSnaps = new Map<string, admin.firestore.DocumentSnapshot>();
@@ -2761,21 +2787,24 @@ export const createGroupAppointment = onCall(async (request) => {
       });
     });
 
-    for (const [mId, indices] of indicesByMaster) {
+    const slotsByMaster = new Map<string, Array<{ start: number; end: number; type: string; appointmentId: string; branchId: string }>>();
+    resolved.forEach((r, i) => {
+      const arr = slotsByMaster.get(r.masterId) || [];
+      arr.push({
+        start: r.startMinutes,
+        end: r.ledgerEndMinutes,
+        type: 'appointment',
+        appointmentId: appointmentRefs[i].id,
+        branchId: r.branchId,
+      });
+      slotsByMaster.set(r.masterId, arr);
+    });
+
+    for (const [mId, newSlots] of slotsByMaster) {
       const snap = ledgerSnaps.get(mId);
       const existingSlots: Array<{ start: number; end: number }> = snap && snap.exists
         ? (snap.data()!.slots || [])
         : [];
-      const newSlots = indices.map((i) => {
-        const r = resolved[i];
-        return {
-          start: r.startMinutes,
-          end: r.ledgerEndMinutes,
-          type: 'appointment',
-          appointmentId: appointmentRefs[i].id,
-          branchId: r.branchId,
-        };
-      });
       tx.set(ledgerRefs.get(mId)!, {
         masterId: mId,
         date,
@@ -2789,5 +2818,6 @@ export const createGroupAppointment = onCall(async (request) => {
     success: true,
     groupId,
     appointmentIds: appointmentRefs.map((r) => r.id),
+    clientId,
   };
 });
