@@ -42,6 +42,20 @@ export default function CalendarPage() {
 
   const [selectedDate, setSelectedDate] = useState(todayAsDateInput);
   const [masters, setMasters] = useState<Master[]>([]);
+
+  useEffect(() => {
+    const dateParam = new URLSearchParams(window.location.search).get('date');
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      setSelectedDate(dateParam);
+    }
+  }, []);
+
+  useEffect(() => {
+    const dateParam = new URLSearchParams(window.location.search).get('date');
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      setSelectedDate(dateParam);
+    }
+  }, []);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

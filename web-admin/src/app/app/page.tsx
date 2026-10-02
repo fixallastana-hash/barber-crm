@@ -6,13 +6,19 @@ import { collection, getDocs } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 
+type TopMaster = { masterId: string; name: string; revenueKzt: number; count: number };
+
 type Stats = {
   mastersActive: number;
   mastersTotal: number;
   appointmentsToday: number;
   revenueTodayKzt: number;
   revenueMonthKzt: number;
+  revenuePrevMonthKzt: number;
+  revenue7dKzt: number;
+  completedMonthCount: number;
   clientsTotal: number;
+  topMasters: TopMaster[];
 };
 
 function pad2(n: number): string {
@@ -21,13 +27,7 @@ function pad2(n: number): string {
 
 function todayKey(): string {
   const now = new Date();
-  return (
-    now.getFullYear() +
-    '-' +
-    pad2(now.getMonth() + 1) +
-    '-' +
-    pad2(now.getDate())
-  );
+  return now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
 }
 
 function monthPrefix(): string {
@@ -37,6 +37,14 @@ function monthPrefix(): string {
 
 function formatKzt(value: number): string {
   return value.toLocaleString('ru-RU') + ' ₸';
+}
+
+function monthDelta(cur: number, prev: number): { label: string; cls: string } {
+  if (prev === 0 && cur === 0) return { label: '—', cls: 'text-gray-400' };
+  if (prev === 0) return { label: 'ново', cls: 'text-green-600' };
+  const d = ((cur - prev) / Math.abs(prev)) * 100;
+  const cls = d > 0 ? 'text-green-600' : d < 0 ? 'text-red-600' : 'text-gray-400';
+  return { label: (d > 0 ? '+' : '') + d.toFixed(1) + '%', cls };
 }
 
 export default function AppIndexPage() {
@@ -49,12 +57,8 @@ export default function AppIndexPage() {
 
   useEffect(() => {
     if (loading) return;
-
     if (!user) return;
-
-    if (user.role !== 'owner') {
-      router.replace('/app/calendar');
-    }
+    if (user.role !== 'owner') router.replace('/app/calendar');
   }, [user, loading, router]);
 
   const loadStats = useCallback(async () => {
@@ -68,40 +72,19 @@ export default function AppIndexPage() {
       const db = getFirebaseDb();
 
       const [mastersSnap, clientsSnap, apptsSnap] = await Promise.all([
-        getDocs(
-          collection(
-            db,
-            'tenants',
-            user.tenantId,
-            'masters',
-          ),
-        ),
-        getDocs(
-          collection(
-            db,
-            'tenants',
-            user.tenantId,
-            'clients',
-          ),
-        ),
-        getDocs(
-          collection(
-            db,
-            'tenants',
-            user.tenantId,
-            'appointments',
-          ),
-        ),
+        getDocs(collection(db, 'tenants', user.tenantId, 'masters')),
+        getDocs(collection(db, 'tenants', user.tenantId, 'clients')),
+        getDocs(collection(db, 'tenants', user.tenantId, 'appointments')),
       ]);
 
       const mastersTotal = mastersSnap.size;
-
       let mastersActive = 0;
+      const masterNames = new Map<string, string>();
 
       mastersSnap.forEach((d) => {
-        if (d.data().isActive === true) {
-          mastersActive += 1;
-        }
+        const data = d.data();
+        if (data.isActive === true) mastersActive += 1;
+        masterNames.set(d.id, typeof data.name === 'string' ? data.name : 'Без имени');
       });
 
       const clientsTotal = clientsSnap.size;
@@ -109,42 +92,64 @@ export default function AppIndexPage() {
       const todayStr = todayKey();
       const monthPfx = monthPrefix();
 
+      const now = new Date();
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonthPfx = prev.getFullYear() + '-' + pad2(prev.getMonth() + 1);
+
+      const sd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      const sevenDaysAgoStr = sd.getFullYear() + '-' + pad2(sd.getMonth() + 1) + '-' + pad2(sd.getDate());
+
       let appointmentsToday = 0;
       let revenueTodayKzt = 0;
       let revenueMonthKzt = 0;
+      let revenuePrevMonthKzt = 0;
+      let revenue7dKzt = 0;
+      let completedMonthCount = 0;
+
+      const masterAgg = new Map<string, { revenue: number; count: number }>();
 
       apptsSnap.forEach((d) => {
         const a = d.data();
-
-        const date =
-          typeof a.date === 'string'
-            ? a.date
-            : '';
-
+        const date = typeof a.date === 'string' ? a.date : '';
         const status = a.status;
+        const price = typeof a.totalPriceKzt === 'number' ? a.totalPriceKzt : 0;
+        const masterId = typeof a.masterId === 'string' ? a.masterId : '';
 
-        const price =
-          typeof a.totalPriceKzt === 'number'
-            ? a.totalPriceKzt
-            : 0;
-
-        if (date === todayStr) {
-          appointmentsToday += 1;
-        }
+        if (date === todayStr) appointmentsToday += 1;
 
         if (status === 'completed' && price > 0) {
-          if (date === todayStr) {
-            revenueTodayKzt += price;
+          if (date === todayStr) revenueTodayKzt += price;
+
+          if (date.length >= 7 && date.slice(0, 7) === monthPfx) {
+            revenueMonthKzt += price;
+            completedMonthCount += 1;
+            if (masterId) {
+              const cur = masterAgg.get(masterId) || { revenue: 0, count: 0 };
+              cur.revenue += price;
+              cur.count += 1;
+              masterAgg.set(masterId, cur);
+            }
           }
 
-          if (
-            date.length >= 7 &&
-            date.slice(0, 7) === monthPfx
-          ) {
-            revenueMonthKzt += price;
+          if (date.length >= 7 && date.slice(0, 7) === prevMonthPfx) {
+            revenuePrevMonthKzt += price;
+          }
+
+          if (date >= sevenDaysAgoStr && date <= todayStr) {
+            revenue7dKzt += price;
           }
         }
       });
+
+      const topMasters: TopMaster[] = Array.from(masterAgg.entries())
+        .map(([id, v]) => ({
+          masterId: id,
+          name: masterNames.get(id) || 'Без имени',
+          revenueKzt: v.revenue,
+          count: v.count,
+        }))
+        .sort((a, b) => b.revenueKzt - a.revenueKzt)
+        .slice(0, 3);
 
       setStats({
         mastersActive,
@@ -152,14 +157,14 @@ export default function AppIndexPage() {
         appointmentsToday,
         revenueTodayKzt,
         revenueMonthKzt,
+        revenuePrevMonthKzt,
+        revenue7dKzt,
+        completedMonthCount,
         clientsTotal,
+        topMasters,
       });
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось загрузить статистику',
-      );
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить статистику');
     } finally {
       setStatsLoading(false);
     }
@@ -169,7 +174,6 @@ export default function AppIndexPage() {
     if (loading) return;
     if (!user) return;
     if (user.role !== 'owner') return;
-
     void loadStats();
   }, [loading, user, loadStats]);
 
@@ -183,34 +187,23 @@ export default function AppIndexPage() {
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
+  if (user.role !== 'owner') return null;
 
-  if (user.role !== 'owner') {
-    return null;
-  }
+  const avgCheck = stats && stats.completedMonthCount > 0
+    ? Math.round(stats.revenueMonthKzt / stats.completedMonthCount)
+    : 0;
 
   return (
     <div className="min-h-screen bg-[#f7f7f5]">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
 
-        {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-              Barber CRM
-            </div>
-
-            <h1 className="text-3xl font-semibold tracking-tight text-gray-950">
-              Главная
-            </h1>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Обзор вашего бизнеса
-            </p>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Barber CRM</div>
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-950">Главная</h1>
+            <p className="mt-1 text-sm text-gray-500">Обзор вашего бизнеса</p>
           </div>
-
           <button
             type="button"
             onClick={() => void loadStats()}
@@ -221,145 +214,90 @@ export default function AppIndexPage() {
           </button>
         </div>
 
-        {/* Error */}
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
         {statsLoading || !stats ? (
           <DashboardSkeleton />
         ) : (
           <>
-            {/* Main stats */}
+            {/* Row 1 — базовые метрики */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
-              <StatCard
-                label="Мастера"
-                value={String(stats.mastersActive)}
-                hint={`из ${stats.mastersTotal}`}
-                description="Активные мастера"
-              />
-
-              <StatCard
-                label="Клиенты"
-                value={String(stats.clientsTotal)}
-                hint="в базе"
-                description="Всего клиентов"
-              />
-
-              <StatCard
-                label="Записи сегодня"
-                value={String(stats.appointmentsToday)}
-                hint="все статусы"
-                description="Запланировано на сегодня"
-              />
-
-              <StatCard
-                label="Выручка сегодня"
-                value={formatKzt(stats.revenueTodayKzt)}
-                hint="завершённые"
-                description="За сегодняшний день"
-              />
+              <StatCard label="Мастера" value={String(stats.mastersActive)} hint={`из ${stats.mastersTotal}`} description="Активные мастера" />
+              <StatCard label="Клиенты" value={String(stats.clientsTotal)} hint="в базе" description="Всего клиентов" />
+              <StatCard label="Записи сегодня" value={String(stats.appointmentsToday)} hint="все статусы" description="Запланировано на сегодня" />
+              <StatCard label="Выручка сегодня" value={formatKzt(stats.revenueTodayKzt)} hint="завершённые" description="За сегодняшний день" />
             </div>
 
-            {/* Revenue */}
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {/* Row 2 — расширенные метрики */}
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard label="Выручка 7 дней" value={formatKzt(stats.revenue7dKzt)} hint="за 7 дней" description="Скользящее окно" />
+              <StatCard label="Средний чек" value={formatKzt(avgCheck)} hint="за месяц" description="По завершённым визитам" />
+              <StatCard label="Завершено визитов" value={String(stats.completedMonthCount)} hint="за месяц" description="Всего за текущий месяц" />
+              <StatCard label="Клиентов в базе" value={String(stats.clientsTotal)} hint="всего" description="Все клиенты салона" />
+            </div>
 
+            {/* Row 3 — месяц + топ-3 */}
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] lg:col-span-2">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-500">
-                      Выручка за месяц
-                    </p>
-
-                    <p className="mt-3 text-3xl font-semibold tracking-tight text-gray-950">
-                      {formatKzt(stats.revenueMonthKzt)}
-                    </p>
-
-                    <p className="mt-2 text-sm text-gray-400">
-                      По завершённым записям
-                    </p>
+                    <p className="text-sm font-medium text-gray-500">Выручка за месяц</p>
+                    <p className="mt-3 text-3xl font-semibold tracking-tight text-gray-950">{formatKzt(stats.revenueMonthKzt)}</p>
+                    <p className="mt-2 text-sm text-gray-400">По завершённым записям</p>
                   </div>
-
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-950 text-sm font-semibold text-white">
-                    ₸
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-950 text-sm font-semibold text-white">₸</div>
+                </div>
+                <div className="mt-5 border-t border-gray-100 pt-4">
+                  <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Прошлый месяц</p>
+                  <div className="mt-2 flex items-baseline gap-3">
+                    <span className="text-lg font-semibold text-gray-700">{formatKzt(stats.revenuePrevMonthKzt)}</span>
+                    {(() => {
+                      const d = monthDelta(stats.revenueMonthKzt, stats.revenuePrevMonthKzt);
+                      return <span className={`text-sm font-medium ${d.cls}`}>{d.label}</span>;
+                    })()}
                   </div>
                 </div>
               </div>
 
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                <p className="text-sm font-medium text-gray-500">
-                  Сегодня
-                </p>
-
-                <p className="mt-3 text-3xl font-semibold tracking-tight text-gray-950">
-                  {stats.appointmentsToday}
-                </p>
-
-                <p className="mt-2 text-sm text-gray-400">
-                  записей в календаре
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() => router.push('/app/calendar')}
-                  className="mt-5 text-sm font-medium text-gray-900 underline decoration-gray-300 underline-offset-4 transition hover:decoration-gray-900"
-                >
-                  Открыть календарь
-                </button>
+                <p className="text-sm font-medium text-gray-500">Топ-3 мастера</p>
+                <p className="mt-1 text-xs text-gray-400">За текущий месяц</p>
+                {stats.topMasters.length === 0 ? (
+                  <p className="mt-5 text-sm text-gray-400">Нет завершённых визитов</p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {stats.topMasters.map((m, i) => (
+                      <div key={m.masterId} className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${i === 0 ? 'bg-gray-950 text-white' : 'bg-gray-100 text-gray-600'}`}>{i + 1}</span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-gray-900">{m.name}</p>
+                            <p className="text-xs text-gray-400">{m.count} визитов</p>
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-sm font-semibold text-gray-900">{formatKzt(m.revenueKzt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Quick navigation */}
             <div className="mt-8">
               <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-950">
-                  Быстрый доступ
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Основные разделы управления салоном
-                </p>
+                <h2 className="text-lg font-semibold text-gray-950">Быстрый доступ</h2>
+                <p className="mt-1 text-sm text-gray-500">Основные разделы управления салоном</p>
               </div>
-
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                <QuickLink
-                  title="Календарь"
-                  description="Записи"
-                  onClick={() => router.push('/app/calendar')}
-                />
-
-                <QuickLink
-                  title="Мастера"
-                  description="Команда"
-                  onClick={() => router.push('/app/masters')}
-                />
-
-                <QuickLink
-                  title="Клиенты"
-                  description="База"
-                  onClick={() => router.push('/app/clients')}
-                />
-
-                <QuickLink
-                  title="Услуги"
-                  description="Прайс"
-                  onClick={() => router.push('/app/services')}
-                />
-
-                <QuickLink
-                  title="Филиалы"
-                  description="Салоны"
-                  onClick={() => router.push('/app/branches')}
-                />
-
-                <QuickLink
-                  title="Настройки"
-                  description="Салон"
-                  onClick={() => router.push('/app/settings')}
-                />
+                <QuickLink title="Календарь" description="Записи" onClick={() => router.push('/app/calendar')} />
+                <QuickLink title="Мастера" description="Команда" onClick={() => router.push('/app/masters')} />
+                <QuickLink title="Клиенты" description="База" onClick={() => router.push('/app/clients')} />
+                <QuickLink title="Услуги" description="Прайс" onClick={() => router.push('/app/services')} />
+                <QuickLink title="Филиалы" description="Салон" onClick={() => router.push('/app/branches')} />
+                <QuickLink title="Настройки" description="Салон" onClick={() => router.push('/app/settings')} />
               </div>
             </div>
           </>
@@ -369,59 +307,31 @@ export default function AppIndexPage() {
   );
 }
 
-function StatCard(props: {
-  label: string;
-  value: string;
-  hint: string;
-  description: string;
-}) {
+function StatCard(props: { label: string; value: string; hint: string; description: string }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-500">
-            {props.label}
-          </p>
-
-          <p className="mt-3 truncate text-2xl font-semibold tracking-tight text-gray-950">
-            {props.value}
-          </p>
+          <p className="text-sm font-medium text-gray-500">{props.label}</p>
+          <p className="mt-3 truncate text-2xl font-semibold tracking-tight text-gray-950">{props.value}</p>
         </div>
-
-        <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500">
-          {props.hint}
-        </span>
+        <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500">{props.hint}</span>
       </div>
-
-      <p className="mt-3 text-xs text-gray-400">
-        {props.description}
-      </p>
+      <p className="mt-3 text-xs text-gray-400">{props.description}</p>
     </div>
   );
 }
 
-function QuickLink(props: {
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
+function QuickLink(props: { title: string; description: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
       className="group rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-sm"
     >
-      <div className="mb-6 flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-xs font-semibold text-gray-600 transition group-hover:bg-gray-950 group-hover:text-white">
-        →
-      </div>
-
-      <p className="text-sm font-semibold text-gray-900">
-        {props.title}
-      </p>
-
-      <p className="mt-1 text-xs text-gray-400">
-        {props.description}
-      </p>
+      <div className="mb-6 flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-xs font-semibold text-gray-600 transition group-hover:bg-gray-950 group-hover:text-white">→</div>
+      <p className="text-sm font-semibold text-gray-900">{props.title}</p>
+      <p className="mt-1 text-xs text-gray-400">{props.description}</p>
     </button>
   );
 }
@@ -431,17 +341,13 @@ function DashboardSkeleton() {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4].map((item) => (
-          <div
-            key={item}
-            className="h-36 animate-pulse rounded-2xl border border-gray-200 bg-white"
-          />
+          <div key={item} className="h-36 animate-pulse rounded-2xl border border-gray-200 bg-white" />
         ))}
       </div>
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white lg:col-span-2" />
         <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" />
       </div>
     </div>
   );
-            }
+}
