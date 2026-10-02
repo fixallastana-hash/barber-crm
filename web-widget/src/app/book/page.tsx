@@ -39,8 +39,11 @@ type Category = {
 
 type Slot = { start: number; end: number; time: string };
 
+type Branch = { id: string; name: string; address: string; city: string };
+
 type SalonData = {
-  tenant: { name: string; city: string };
+  tenant: { name: string; city: string; logoUrl?: string };
+  branches: Branch[];
   categories: Category[];
   services: Service[];
   masters: Master[];
@@ -61,22 +64,85 @@ const dateRu = (s: string) =>
 function BookingModeSelector({
   onSelect,
   salonName,
+  logoUrl,
+  branches,
+  selectedBranchId,
+  onBranchChange,
 }: {
   onSelect: (mode: 'single' | 'group') => void;
   salonName: string;
+  logoUrl: string;
+  branches: Branch[];
+  selectedBranchId: string;
+  onBranchChange: (id: string) => void;
 }) {
+  const [branchModalOpen, setBranchModalOpen] = useState(false);
+  const selectedBranch = branches.find((b) => b.id === selectedBranchId) || branches[0] || null;
+  const hasMultipleBranches = branches.length > 1;
+
   return (
-    <main className="min-h-screen bg-surface px-4 py-6">
-      <div className="mx-auto w-full max-w-md">
-        <header className="mb-6">
-          <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
-            Онлайн-запись
+    <main className="min-h-screen bg-surface">
+      <div className="mx-auto w-full max-w-md pb-8">
+        {/* Чёрная шапка с лого */}
+        <header className="bg-black px-5 py-6">
+          <div className="flex items-center gap-4">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt={salonName}
+                className="h-20 w-20 shrink-0 rounded-full border-4 border-white object-cover"
+              />
+            ) : (
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-white text-3xl font-bold text-black">
+                {salonName.charAt(0).toUpperCase() || 'B'}
+              </div>
+            )}
+            <h1 className="min-w-0 flex-1 text-2xl font-bold leading-tight tracking-tight text-white">
+              {salonName}
+            </h1>
           </div>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-ink">{salonName}</h1>
-          <p className="mt-1 text-sm text-muted">Как вы хотите записаться?</p>
         </header>
 
-        <div className="space-y-3">
+        {/* Блок филиала — с заходом на шапку */}
+        <div className="-mt-4 rounded-t-3xl bg-surface px-5 pb-4 pt-5">
+          {selectedBranch && (
+            <button
+              type="button"
+              onClick={() => hasMultipleBranches && setBranchModalOpen(true)}
+              disabled={!hasMultipleBranches}
+              className="block w-full text-left"
+            >
+              <div className="flex items-start gap-2">
+                <h2 className="text-xl font-bold tracking-tight text-ink">
+                  {selectedBranch.name}
+                </h2>
+                {hasMultipleBranches && (
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="mt-1.5 shrink-0 text-muted"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-muted">
+                {selectedBranch.address}
+                {selectedBranch.city ? `, ${selectedBranch.city}` : ''}
+              </p>
+            </button>
+          )}
+        </div>
+
+        {/* Кнопки режима */}
+        <div className="space-y-3 px-4 pt-4">
           <button
             type="button"
             onClick={() => onSelect('single')}
@@ -110,6 +176,59 @@ function BookingModeSelector({
           </button>
         </div>
       </div>
+
+      {/* Модалка выбора филиала */}
+      {branchModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center"
+          onClick={() => setBranchModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl bg-surface p-4 pb-8 sm:rounded-3xl sm:pb-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-ink">Выберите филиал</h3>
+              <button
+                type="button"
+                onClick={() => setBranchModalOpen(false)}
+                aria-label="Закрыть"
+                className="rounded-lg p-2 text-muted transition hover:bg-white"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-2">
+              {branches.map((b) => {
+                const active = b.id === selectedBranchId;
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => {
+                      onBranchChange(b.id);
+                      setBranchModalOpen(false);
+                    }}
+                    className={
+                      'flex w-full items-start gap-3 rounded-2xl border-2 bg-card p-4 text-left transition ' +
+                      (active ? 'border-ink' : 'border-line hover:border-ink/30')
+                    }
+                  >
+                    <div className="min-w-0 flex-1">
+                      <b className="block text-base font-semibold text-ink">{b.name}</b>
+                      <span className="mt-0.5 block text-sm text-muted">
+                        {b.address}
+                        {b.city ? `, ${b.city}` : ''}
+                      </span>
+                    </div>
+                    {active && <span className="mt-1 shrink-0 text-lg text-ink">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -161,6 +280,8 @@ function BookingFlow() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const hydratedRef = useRef(false);
 
+  const [selectedBranchId, setSelectedBranchId] = useState('');
+
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -199,7 +320,6 @@ function BookingFlow() {
     [pushURL, step]
   );
 
-  // ---------- Back handler ----------
   const handleBack = useCallback(() => {
     if (step === 1) {
       pushURL({ mode: null, step: 1 });
@@ -251,6 +371,7 @@ function BookingFlow() {
           status: string;
           newSlug?: string;
           tenant?: SalonData['tenant'];
+          branches?: Branch[];
           categories?: Category[];
           services?: Service[];
           masters?: Master[];
@@ -269,6 +390,7 @@ function BookingFlow() {
         }
         setSalon({
           tenant: result.tenant,
+          branches: result.branches || [],
           categories: result.categories || [],
           services: result.services || [],
           masters: result.masters || [],
@@ -284,11 +406,38 @@ function BookingFlow() {
     };
   }, [slug, router]);
 
+  // Default category
   useEffect(() => {
     if (salon?.categories.length && !draft.categoryId) {
       setDraft((prev) => ({ ...prev, categoryId: salon.categories[0].id }));
     }
   }, [salon, draft.categoryId]);
+
+  // ---------- Branch init ----------
+  useEffect(() => {
+    if (!salon?.branches?.length) return;
+    if (selectedBranchId) return;
+    let saved = '';
+    try {
+      saved = localStorage.getItem('widgetBranch_' + slug) || '';
+    } catch {
+      /* ignore */
+    }
+    const valid = saved && salon.branches.some((b) => b.id === saved) ? saved : '';
+    setSelectedBranchId(valid || salon.branches[0].id);
+  }, [salon, slug, selectedBranchId]);
+
+  const handleBranchChange = useCallback(
+    (id: string) => {
+      setSelectedBranchId(id);
+      try {
+        localStorage.setItem('widgetBranch_' + slug, id);
+      } catch {
+        /* ignore */
+      }
+    },
+    [slug]
+  );
 
   const eligibleMasters = useMemo(() => {
     if (!salon) return [];
@@ -507,6 +656,10 @@ function BookingFlow() {
       <BookingModeSelector
         onSelect={(m) => pushURL({ mode: m, step: 1 })}
         salonName={salon.tenant.name}
+        logoUrl={salon.tenant.logoUrl || ''}
+        branches={salon.branches}
+        selectedBranchId={selectedBranchId}
+        onBranchChange={handleBranchChange}
       />
     );
   }
@@ -556,7 +709,6 @@ function BookingFlow() {
   return (
     <main className="min-h-screen bg-surface px-4 py-6 pb-32">
       <div className="mx-auto w-full max-w-md">
-                {/* Компактная шапка: назад слева, название справа */}
         <header className="mb-6 flex items-center justify-between gap-3">
           <button
             type="button"
