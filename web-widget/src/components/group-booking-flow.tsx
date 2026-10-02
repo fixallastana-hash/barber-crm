@@ -254,6 +254,12 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
 
   const steps = ['Люди', 'Время', 'Контакты'];
 
+  const handleBack = () => {
+    if (step === 1) { onExit(); return; }
+    if (step === 2) { setStep(1); return; }
+    if (step === 3) { setStep(2); return; }
+  };
+
   if (success) {
     return (
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
@@ -283,22 +289,18 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
   return (
     <main className="min-h-screen bg-surface px-4 py-6 pb-32">
       <div className="mx-auto w-full max-w-md">
-        <header className="mb-6 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
-              Групповая запись
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
-              {salon.tenant.name}
-            </h1>
-          </div>
+        {/* Компактная шапка — как в одиночном flow */}
+        <header className="mb-6 flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={onExit}
-            className="shrink-0 rounded-lg border border-line bg-white px-3 py-2 text-xs font-medium text-muted transition hover:border-ink hover:text-ink"
+            onClick={handleBack}
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-4 text-sm font-medium text-muted transition hover:border-ink hover:text-ink"
           >
-            Назад
+            ← Назад
           </button>
+          <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-ink">
+            {salon.tenant.name}
+          </h1>
         </header>
 
         <div className="mb-6 flex items-center gap-1.5">
@@ -445,13 +447,6 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
 
         {step === 2 && (
           <section>
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="mb-4 text-sm font-medium text-muted transition hover:text-ink"
-            >
-              ← Назад
-            </button>
             <div className="mb-4">
               <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
                 Шаг 2
@@ -516,13 +511,6 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
 
         {step === 3 && slot && (
           <section>
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="mb-4 text-sm font-medium text-muted transition hover:text-ink"
-            >
-              ← Назад
-            </button>
             <div className="mb-4">
               <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
                 Шаг 3
