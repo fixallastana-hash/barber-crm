@@ -591,6 +591,25 @@ function BookingFlow() {
               </p>
             </div>
             <div className="space-y-2">
+              {eligibleMasters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => pickMaster(ANY_MASTER)}
+                  className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-primary bg-primary/5 p-4 text-left transition hover:bg-primary/10"
+                >
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-2xl text-ink">
+                    ⋯
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <b className="block text-base font-semibold text-ink">Не важно</b>
+                    <small className="mt-0.5 block text-sm text-muted">
+                      Подберём свободного мастера
+                    </small>
+                  </span>
+                  <i className="shrink-0 text-lg text-muted not-italic">→</i>
+                </button>
+              )}
+
               {eligibleMasters.map((m) => (
                 <button
                   key={m.id}
@@ -621,25 +640,6 @@ function BookingFlow() {
                   <i className="shrink-0 text-lg text-muted not-italic">→</i>
                 </button>
               ))}
-
-              {eligibleMasters.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => pickMaster(ANY_MASTER)}
-                  className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-primary bg-primary/5 p-4 text-left transition hover:bg-primary/10"
-                >
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-2xl text-ink">
-                    ⋯
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <b className="block text-base font-semibold text-ink">Не важно</b>
-                    <small className="mt-0.5 block text-sm text-muted">
-                      Подберём свободного мастера
-                    </small>
-                  </span>
-                  <i className="shrink-0 text-lg text-muted not-italic">→</i>
-                </button>
-              )}
 
               {!eligibleMasters.length && (
                 <div className="rounded-2xl border border-line bg-card p-6 text-center text-base text-muted">
