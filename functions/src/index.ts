@@ -1134,6 +1134,7 @@ export const widgetGetSalon = onCall({ invoker: 'public' }, async (request) => {
       city: info.city,
       phone: info.phone,
       logoUrl: info.logoUrl || '',
+      bannerUrl: info.bannerUrl || '',   
       cancellationWindowHours: info.cancellationWindowHours || 3,
     },
     branches,
@@ -3132,3 +3133,66 @@ export const getFinancialReport = onCall(async (request) => {
 
   return { totals, byMaster, byDay };
 });
+// ============ uploadSalonBanner ============
+
+export const uploadSalonBanner = onCall(
+  { invoker: 'public', memory: '512MiB' },
+  async (request) => {
+    const { tenantId, role } = requireAuth(request);
+    requireOwnerOrAdmin(role);
+
+    const data = request.data || {};
+    const bannerBase64 = data.bannerBase64;
+
+    if (typeof bannerBase64 !== 'string' || !bannerBase64) {
+      throw new HttpsError('invalid-argument', 'bannerBase64 is required');
+    }
+
+    const base64 = bannerBase64.includes(',')
+      ? bannerBase64.split(',')[1]
+      : bannerBase64;
+
+    if (!base64) {
+      throw new HttpsError('invalid-argument', 'bannerBase64 is invalid');
+    }
+
+    const buffer = Buffer.from(base64, 'base64');
+    const maxBytes = 1024 * 1024;
+
+    if (buffer.length === 0) {
+      throw new HttpsError('invalid-argument', 'bannerBase64 is invalid');
+    }
+    if (buffer.length > maxBytes) {
+      throw new HttpsError('invalid-argument', 'bannerBase64 exceeds maximum 1 MB');
+    }
+
+    const infoRef = db.doc('tenants/' + tenantId + '/config/info');
+    const infoSnap = await infoRef.get();
+    if (!infoSnap.exists) {
+      throw new HttpsError('not-found', 'Tenant not found');
+    }
+
+    const bucket = getStorage().bucket();
+    const path = 'tenant-banners/' + tenantId + '/banner.png';
+    const file = bucket.file(path);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: 'image/png',
+        cacheControl: 'public,max-age=31536000',
+      },
+    });
+
+    await file.makePublic();
+
+    const bannerUrl =
+      'https://storage.googleapis.com/' + bucket.name + '/' + path + '?v=' + Date.now();
+
+    await infoRef.update({
+      bannerUrl,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { bannerUrl };
+  },
+);

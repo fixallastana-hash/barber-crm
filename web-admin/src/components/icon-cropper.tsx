@@ -7,6 +7,9 @@ type Props = {
   initialPositionX?: number;
   initialPositionY?: number;
   initialScale?: number;
+  aspect?: number;
+  outputWidth?: number;
+  maxBlobSize?: number;
   onSave: (
     blob: Blob,
     positionX: number,
@@ -16,10 +19,8 @@ type Props = {
   onCancel: () => void;
 };
 
-const CANVAS_SIZE = 256;
 const MIN_SCALE = 1;
 const MAX_SCALE = 3;
-const MAX_BLOB_SIZE = 500 * 1024;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -30,6 +31,9 @@ export function IconCropper({
   initialPositionX = 50,
   initialPositionY = 50,
   initialScale = 1,
+  aspect = 1,
+  outputWidth = 256,
+  maxBlobSize = 500 * 1024,
   onSave,
   onCancel,
 }: Props) {
@@ -46,7 +50,7 @@ export function IconCropper({
 
   const [imageSrc, setImageSrc] = useState('');
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
-  const [viewportSize, setViewportSize] = useState(0);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [positionX, setPositionX] = useState(
     clamp(initialPositionX, 0, 100),
   );
@@ -61,7 +65,8 @@ export function IconCropper({
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
-    const update = () => setViewportSize(el.clientWidth);
+    const update = () =>
+      setViewportSize({ width: el.clientWidth, height: el.clientHeight });
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -184,9 +189,11 @@ export function IconCropper({
     setError('');
 
     try {
+      const outputHeight = Math.max(1, Math.round(outputWidth / aspect));
+
       const canvas = document.createElement('canvas');
-      canvas.width = CANVAS_SIZE;
-      canvas.height = CANVAS_SIZE;
+      canvas.width = outputWidth;
+      canvas.height = outputHeight;
 
       const context = canvas.getContext('2d');
 
@@ -195,8 +202,8 @@ export function IconCropper({
       }
 
       const coverScale = Math.max(
-        CANVAS_SIZE / imageSize.width,
-        CANVAS_SIZE / imageSize.height,
+        outputWidth / imageSize.width,
+        outputHeight / imageSize.height,
       );
 
       const finalScale = coverScale * scale;
@@ -204,11 +211,11 @@ export function IconCropper({
       const drawHeight = imageSize.height * finalScale;
 
       const offsetX =
-        -(drawWidth - CANVAS_SIZE) * (positionX / 100);
+        -(drawWidth - outputWidth) * (positionX / 100);
       const offsetY =
-        -(drawHeight - CANVAS_SIZE) * (positionY / 100);
+        -(drawHeight - outputHeight) * (positionY / 100);
 
-      context.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      context.clearRect(0, 0, outputWidth, outputHeight);
       context.drawImage(
         image,
         offsetX,
@@ -225,9 +232,9 @@ export function IconCropper({
         throw new Error('Не удалось создать PNG');
       }
 
-      if (blob.size > MAX_BLOB_SIZE) {
+      if (blob.size > maxBlobSize) {
         throw new Error(
-          'Иконка получилась слишком большой. Уменьшите масштаб или выберите другое изображение.',
+          'Изображение получилось слишком большим. Уменьшите масштаб или выберите другое фото.',
         );
       }
 
@@ -244,13 +251,13 @@ export function IconCropper({
   };
 
   const previewDimensions = (() => {
-    if (!imageSize.width || !imageSize.height || !viewportSize) {
+    if (!imageSize.width || !imageSize.height || !viewportSize.width || !viewportSize.height) {
       return { width: 0, height: 0 };
     }
 
     const coverScale = Math.max(
-      viewportSize / imageSize.width,
-      viewportSize / imageSize.height,
+      viewportSize.width / imageSize.width,
+      viewportSize.height / imageSize.height,
     );
 
     return {
@@ -260,21 +267,21 @@ export function IconCropper({
   })();
 
   const previewLeft =
-    viewportSize > 0
-      ? -(previewDimensions.width - viewportSize) * (positionX / 100)
+    viewportSize.width > 0
+      ? -(previewDimensions.width - viewportSize.width) * (positionX / 100)
       : 0;
 
   const previewTop =
-    viewportSize > 0
-      ? -(previewDimensions.height - viewportSize) * (positionY / 100)
+    viewportSize.height > 0
+      ? -(previewDimensions.height - viewportSize.height) * (positionY / 100)
       : 0;
 
   return (
     <div className="space-y-4">
       <div
         ref={viewportRef}
-        className="relative mx-auto aspect-square w-full max-w-[360px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-100"
-        style={{ touchAction: 'none' }}
+        className="relative mx-auto w-full max-w-[420px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-100"
+        style={{ touchAction: 'none', aspectRatio: String(aspect) }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={releasePointer}

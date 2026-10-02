@@ -42,7 +42,7 @@ type Slot = { start: number; end: number; time: string };
 type Branch = { id: string; name: string; address: string; city: string };
 
 type SalonData = {
-  tenant: { name: string; city: string; logoUrl?: string };
+  tenant: { name: string; city: string; logoUrl?: string; bannerUrl?: string };
   branches: Branch[];
   categories: Category[];
   services: Service[];
@@ -65,6 +65,7 @@ function BookingModeSelector({
   onSelect,
   salonName,
   logoUrl,
+  bannerUrl,
   branches,
   selectedBranchId,
   onBranchChange,
@@ -72,6 +73,7 @@ function BookingModeSelector({
   onSelect: (mode: 'single' | 'group') => void;
   salonName: string;
   logoUrl: string;
+  bannerUrl: string;
   branches: Branch[];
   selectedBranchId: string;
   onBranchChange: (id: string) => void;
@@ -83,9 +85,23 @@ function BookingModeSelector({
   return (
     <main className="min-h-screen bg-surface">
       <div className="mx-auto w-full max-w-md pb-8">
-        {/* Чёрная шапка с лого */}
-        <header className="bg-black px-5 py-6">
-          <div className="flex items-center gap-4">
+        {/* Шапка с фото-фоном */}
+        <header
+          className="relative px-5 py-10"
+          style={
+            bannerUrl
+              ? {
+                  backgroundImage: `url(${bannerUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }
+              : { backgroundColor: '#171717' }
+          }
+        >
+          {/* Затемнение поверх фото */}
+          {bannerUrl && <div className="absolute inset-0 bg-black/50" aria-hidden="true" />}
+
+          <div className="relative flex items-center gap-4">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -98,7 +114,7 @@ function BookingModeSelector({
                 {salonName.charAt(0).toUpperCase() || 'B'}
               </div>
             )}
-            <h1 className="min-w-0 flex-1 text-2xl font-bold leading-tight tracking-tight text-white">
+            <h1 className="min-w-0 flex-1 text-2xl font-bold leading-tight tracking-tight text-white drop-shadow-md">
               {salonName}
             </h1>
           </div>
@@ -657,6 +673,7 @@ function BookingFlow() {
         onSelect={(m) => pushURL({ mode: m, step: 1 })}
         salonName={salon.tenant.name}
         logoUrl={salon.tenant.logoUrl || ''}
+        bannerUrl={salon.tenant.bannerUrl || ''}
         branches={salon.branches}
         selectedBranchId={selectedBranchId}
         onBranchChange={handleBranchChange}
