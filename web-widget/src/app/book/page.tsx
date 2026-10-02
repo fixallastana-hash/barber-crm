@@ -170,7 +170,10 @@ function BookingFlow() {
 
   // ---------- URL helpers ----------
   const pushURL = useCallback(
-    (next: { step?: number; mode?: 'single' | 'group' | null }) => {
+    (
+      next: { step?: number; mode?: 'single' | 'group' | null },
+      opts?: { replace?: boolean }
+    ) => {
       const params = new URLSearchParams(Array.from(searchParams.entries()));
       if (next.step !== undefined) {
         if (next.step === 1) params.delete('step');
@@ -181,7 +184,9 @@ function BookingFlow() {
         else params.set('mode', next.mode);
       }
       const qs = params.toString();
-      router.push('/book' + (qs ? '?' + qs : ''), { scroll: false });
+      const url = '/book' + (qs ? '?' + qs : '');
+      if (opts?.replace) router.replace(url, { scroll: false });
+      else router.push(url, { scroll: false });
     },
     [router, searchParams]
   );
@@ -507,10 +512,14 @@ function BookingFlow() {
   }
 
   if (mode === 'group') {
+    const groupStep: 1 | 2 | 3 = step > 3 ? 3 : (step as 1 | 2 | 3);
     return (
       <GroupBookingFlow
         salon={salon}
         slug={slug}
+        step={groupStep}
+        onStepChange={(n) => pushURL({ step: n })}
+        onStepReplace={(n) => pushURL({ step: n }, { replace: true })}
         onExit={() => pushURL({ mode: null, step: 1 })}
       />
     );

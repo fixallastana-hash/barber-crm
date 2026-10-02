@@ -61,54 +61,88 @@ const dateRu = (s: string) =>
 type Props = {
   salon: SalonData;
   slug: string;
+  step: 1 | 2 | 3;
+  onStepChange: (n: 1 | 2 | 3) => void;
+  onStepReplace: (n: 1 | 2 | 3) => void;
   onExit: () => void;
 };
 
-export function GroupBookingFlow({ salon, slug, onExit }: Props) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [mode, setMode] = useState<Mode>('same-master');
-  const [groupMasterId, setGroupMasterId] = useState('');
-  const [people, setPeople] = useState<Person[]>(() => [
+type Draft = {
+  mode: Mode;
+  groupMasterId: string;
+  people: Person[];
+  date: string;
+  slot: Slot | null;
+  phone: string;
+  consent: boolean;
+};
+
+const EMPTY_DRAFT: Draft = {
+  mode: 'same-master',
+  groupMasterId: '',
+  people: [
     { clientName: '', masterId: '', serviceIds: [] },
     { clientName: '', masterId: '', serviceIds: [] },
-  ]);
-  const [date, setDate] = useState('');
+  ],
+  date: '',
+  slot: null,
+  phone: '',
+  consent: false,
+};
+
+export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplace, onExit }: Props) {
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [hydrated, setHydrated] = useState(false);
+  const storageKey = 'group_draft_' + slug;
+
   const [slots, setSlots] = useState<Slot[]>([]);
-  const [slot, setSlot] = useState<Slot | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
-  const [phone, setPhone] = useState('');
-  const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const updatePerson = (idx: number, patch: Partial<Person>) => {
-    setPeople(prev => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
-  };
+  const { mode, groupMasterId, people, date, slot, phone, consent } = draft;
 
-  const addPerson = () => {
-    if (people.length >= MAX_PEOPLE) return;
-    setPeople(prev => [...prev, { clientName: '', masterId: '', serviceIds: [] }]);
-  };
+  // ---------- sessionStorage hydration ----------
+  useEffect(() => {
+    if (typeof window === 'undefined' || !slug) {
+      setHydrated(true);
+      return;
+    }
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<Draft>;
+        setDraft(prev => ({
+          ...prev,
+          ...parsed,
+          people:
+            Array.isArray(parsed.people) &&
+            parsed.people.length >= MIN_PEOPLE &&
+            parsed.people.length <= MAX_PEOPLE
+              ? parsed.people
+              : prev.people,
+          slot: parsed.slot ?? null,
+        }));
+      }
+    } catch {
+      /* ignore */
+    }
+    setHydrated(true);
+  }, [slug, storageKey]);
 
-  const removePerson = (idx: number) => {
-    if (people.length <= MIN_PEOPLE) return;
-    setPeople(prev => prev.filter((_, i) => i !== idx));
-  };
+  // persist
+  useEffect(() => {
+    if (!hydrated) return;
+    if (typeof window === 'undefined' || !slug) return;
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify(draft));
+    } catch {
+      /* ignore */
+    }
+  }, [draft, hydrated, slug, storageKey]);
 
-  const togglePersonService = (idx: number, serviceId: string) => {
-    setPeople(prev =>
-      prev.map((p, i) => {
-        if (i !== idx) return p;
-        const has = p.serviceIds.includes(serviceId);
-        return {
-          ...p,
-          serviceIds: has ? p.serviceIds.filter(x => x !== serviceId) : [...p.serviceIds, serviceId],
-        };
-      })
-    );
-  };
-
+  // ---------- derived ----------
   const sameMasterCandidates = useMemo(() => {
     if (mode !== 'same-master') return [];
     return salon.masters.filter(m => {
@@ -148,15 +182,69 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
     return sum;
   }, [people, salon.services]);
 
+  // ---------- state helpers ----------
+  const invalidateSlot = <T extends Partial<Draft>>(patch: T): T & { slot: null } => ({
+    ...patch,
+    slot: null,
+  });
+
+  const setMode = (m: Mode) => setDraft(p => ({ ...p, mode: m, slot: null }));
+  const setGroupMasterId = (id: string) => setDraft(p => ({ ...p, groupMasterId: id, slot: null }));
+  const setDate = (d: string) => setDraft(p => ({ ...p, date: d, slot: null }));
+  const setPhone = (ph: string) => setDraft(p => ({ ...p, phone: ph }));
+  const setConsent = (c: boolean) => setDraft(p => ({ ...p, consent: c }));
+  const setSlot = (s: Slot | null) => setDraft(p => ({ ...p, slot: s }));
+
+  const updatePerson = (idx: number, patch: Partial<Person>) => {
+    setDraft(p => ({
+      ...p,
+      people: p.people.map((x, i) => (i === idx ? { ...x, ...patch } : x)),
+      slot: null,
+    }));
+  };
+
+  const addPerson = () => {
+    setDraft(p => {
+      if (p.people.length >= MAX_PEOPLE) return p;
+      return {
+        ...p,
+        people: [...p.people, { clientName: '', masterId: '', serviceIds: [] }],
+        slot: null,
+      };
+    });
+  };
+
+  const removePerson = (idx: number) => {
+    setDraft(p => {
+      if (p.people.length <= MIN_PEOPLE) return p;
+      return { ...p, people: p.people.filter((_, i) => i !== idx), slot: null };
+    });
+  };
+
+  const togglePersonService = (idx: number, serviceId: string) => {
+    setDraft(p => ({
+      ...p,
+      people: p.people.map((x, i) => {
+        if (i !== idx) return x;
+        const has = x.serviceIds.includes(serviceId);
+        return {
+          ...x,
+          serviceIds: has ? x.serviceIds.filter(y => y !== serviceId) : [...x.serviceIds, serviceId],
+        };
+      }),
+      slot: null,
+    }));
+  };
+
+  // ---------- load slots ----------
   const loadSlots = useCallback(async () => {
     if (step !== 2 || !date) return;
     if (!isStep1Valid) return;
     if (!uniqueMasters.length) return;
 
     setLoadingSlots(true);
-    setSlot(null);
-    setSlots([]);
     setError('');
+    setSlots([]);
 
     try {
       const fn = httpsCallable(getFirebaseFunctions(), 'widgetGetSlots');
@@ -207,6 +295,14 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
     void loadSlots();
   }, [loadSlots]);
 
+  // ---------- guard: нельзя быть на шаге без данных ----------
+  useEffect(() => {
+    if (!hydrated) return;
+    if (step >= 2 && !isStep1Valid) onStepReplace(1);
+    else if (step >= 3 && !slot) onStepReplace(2);
+  }, [hydrated, step, isStep1Valid, slot, onStepReplace]);
+
+  // ---------- actions ----------
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!slot || !consent || !phone.trim()) return;
@@ -230,13 +326,18 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
         consent: true,
       };
       await fn(payload);
+      try {
+        sessionStorage.removeItem(storageKey);
+      } catch {
+        /* ignore */
+      }
       setSuccess(true);
     } catch (err) {
       const e2 = err as { code?: string; message?: string };
       const code = (e2.code || '').replace(/^functions\//, '');
       if (code === 'aborted' || e2.message?.includes('slot_taken')) {
         setError('Это время только что заняли. Выберите другое.');
-        setStep(2);
+        onStepChange(2);
       } else if (code === 'permission-denied') {
         setError('Онлайн-запись недоступна, позвоните в салон.');
       } else {
@@ -255,9 +356,18 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
   const steps = ['Люди', 'Время', 'Контакты'];
 
   const handleBack = () => {
-    if (step === 1) { onExit(); return; }
-    if (step === 2) { setStep(1); return; }
-    if (step === 3) { setStep(2); return; }
+    if (step === 1) {
+      onExit();
+      return;
+    }
+    if (step === 2) {
+      onStepChange(1);
+      return;
+    }
+    if (step === 3) {
+      onStepChange(2);
+      return;
+    }
   };
 
   if (success) {
@@ -466,11 +576,7 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
                 min={todayString}
                 max={maxDate}
                 value={date}
-                onChange={e => {
-                  setDate(e.target.value);
-                  setSlots([]);
-                  setSlot(null);
-                }}
+                onChange={e => setDate(e.target.value)}
                 className="h-14 w-full rounded-xl border border-line bg-card px-4 text-base text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
             </label>
@@ -497,7 +603,7 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
                     type="button"
                     onClick={() => {
                       setSlot(s);
-                      setStep(3);
+                      onStepChange(3);
                     }}
                     className="rounded-xl border border-line bg-card px-3 py-3.5 text-base font-medium text-ink transition hover:border-primary hover:bg-primary/10"
                   >
@@ -578,7 +684,7 @@ export function GroupBookingFlow({ salon, slug, onExit }: Props) {
             <button
               type="button"
               disabled={!isStep1Valid}
-              onClick={() => setStep(2)}
+              onClick={() => onStepChange(2)}
               className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               Продолжить →
