@@ -7,53 +7,100 @@ import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 
 type Master = { id: string; name: string; isActive?: boolean };
-
-type Totals = {
-  totalPriceKzt: number;
-  masterEarningKzt: number;
-  salonRevenueKzt: number;
-  appointmentsCount: number;
-  compensationMissingCount: number;
-};
-
-type ByMasterRow = {
-  masterId: string;
-  masterName: string;
-  appointmentsCount: number;
-  totalPriceKzt: number;
-  masterEarningKzt: number;
-  salonRevenueKzt: number;
-};
-
-type ByDayRow = {
-  date: string;
-  appointmentsCount: number;
-  totalPriceKzt: number;
-  masterEarningKzt: number;
-  salonRevenueKzt: number;
-};
-
-type Report = {
-  totals: Totals;
-  byMaster: ByMasterRow[];
-  byDay: ByDayRow[];
-};
-
+type Totals = { totalPriceKzt: number; masterEarningKzt: number; salonRevenueKzt: number; appointmentsCount: number; compensationMissingCount: number };
+type ByMasterRow = { masterId: string; masterName: string; appointmentsCount: number; totalPriceKzt: number; masterEarningKzt: number; salonRevenueKzt: number };
+type ByDayRow = { date: string; appointmentsCount: number; totalPriceKzt: number; masterEarningKzt: number; salonRevenueKzt: number };
+type Report = { totals: Totals; byMaster: ByMasterRow[]; byDay: ByDayRow[] };
 type Preset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'custom';
 
-function pad2(n: number): string {
-  return String(n).padStart(2, '0');
+const PAGE_SIZE = 30;
+const BAR_COLOR = '#F4C842';
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtDateRu = (s: string) => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${d}.${m}.${y}`; };
+const fmtKzt = (n: number) => Number(n || 0).toLocaleString('ru-RU') + ' ₸';
+
+function shiftDays(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  return ymd(dt);
 }
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+function downloadCsv(filename: string, rows: string[][]) {
+  const escape = (v: string) => {
+    const s = String(v ?? '');
+    return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = rows.map((r) => r.map(escape).join(';')).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
-function fmtDateRu(ymdStr: string): string {
-  if (!ymdStr) return '';
-  const [y, m, d] = ymdStr.split('-');
-  return `${d}.${m}.${y}`;
-}
-function fmtKzt(n: number): string {
-  return Number(n || 0).toLocaleString('ru-RU') + ' ₸';
+
+function BarChart({ data }: { data: ByDayRow[] }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  if (!data.length) return null;
+  const sliced = data.slice(0, 30).reverse();
+  const max = Math.max(1, ...sliced.map((d) => d.salonRevenueKzt));
+  const roundMax = Math.ceil(max / 10000) * 10000 || max;
+  const w = 720, h = 200, padL = 60, padR = 12, padT = 12, padB = 28;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  const barW = innerW / sliced.length;
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-[220px] w-full min-w-[500px]">
+        {ticks.map((t) => {
+          const y = padT + innerH * (1 - t);
+          return (
+            <g key={t}>
+              <line x1={padL} x2={w - padR} y1={y} y2={y} stroke="#eee" strokeDasharray="3 4" />
+              <text x={padL - 6} y={y + 3} textAnchor="end" fontSize="10" fill="#8b8781">
+                {Math.round(roundMax * t).toLocaleString('ru-RU')}
+              </text>
+            </g>
+          );
+        })}
+        {sliced.map((d, i) => {
+          const barH = (d.salonRevenueKzt / roundMax) * innerH;
+          const x = padL + i * barW + barW * 0.15;
+          const bw = barW * 0.7;
+          const y = padT + innerH - barH;
+          return (
+            <g key={d.date} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}>
+              <rect x={x} y={y} width={bw} height={barH} fill={BAR_COLOR} opacity={hovered === i ? 1 : 0.85} rx={3} />
+              <rect x={x} y={padT} width={bw} height={innerH} fill="transparent" />
+              {hovered === i && (
+                <g>
+                  <rect x={x + bw / 2 - 55} y={Math.max(2, y - 34)} width={110} height={26} rx={6} fill="#171717" />
+                  <text x={x + bw / 2} y={Math.max(2, y - 34) + 17} textAnchor="middle" fontSize="11" fill="#fff">
+                    {fmtKzt(d.salonRevenueKzt)}
+                  </text>
+                </g>
+              )}
+              {i % Math.ceil(sliced.length / 8) === 0 && (
+                <text x={x + bw / 2} y={h - 8} textAnchor="middle" fontSize="10" fill="#8b8781">
+                  {d.date.slice(8)}.{d.date.slice(5, 7)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {data.length > 30 && (
+        <p className="mt-2 text-center text-xs text-[#8b8781]">Показаны последние 30 дней из {data.length}</p>
+      )}
+    </div>
+  );
 }
 
 export default function FinancePage() {
@@ -62,15 +109,17 @@ export default function FinancePage() {
 
   const todayStr = useMemo(() => ymd(new Date()), []);
   const [preset, setPreset] = useState<Preset>('today');
-  const [dateFrom, setDateFrom] = useState<string>(todayStr);
-  const [dateTo, setDateTo] = useState<string>(todayStr);
-  const [masterId, setMasterId] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState(todayStr);
+  const [dateTo, setDateTo] = useState(todayStr);
+  const [masterId, setMasterId] = useState('');
   const [report, setReport] = useState<Report | null>(null);
+  const [prevReport, setPrevReport] = useState<Report | null>(null);
   const [masters, setMasters] = useState<Master[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [showCompare, setShowCompare] = useState(false);
 
-  // Загрузка мастеров для фильтра
   useEffect(() => {
     if (!user?.tenantId) return;
     const unsub = onSnapshot(
@@ -90,57 +139,44 @@ export default function FinancePage() {
   const applyPreset = useCallback((p: Preset) => {
     const now = new Date();
     setPreset(p);
-    if (p === 'today') {
-      const s = ymd(now);
-      setDateFrom(s); setDateTo(s);
-    } else if (p === 'yesterday') {
-      const y = new Date(now); y.setDate(y.getDate() - 1);
-      const s = ymd(y);
-      setDateFrom(s); setDateTo(s);
-    } else if (p === '7d') {
-      const s = new Date(now); s.setDate(s.getDate() - 6);
-      setDateFrom(ymd(s)); setDateTo(ymd(now));
-    } else if (p === '30d') {
-      const s = new Date(now); s.setDate(s.getDate() - 29);
-      setDateFrom(ymd(s)); setDateTo(ymd(now));
-    } else if (p === 'month') {
-      const s = new Date(now.getFullYear(), now.getMonth(), 1);
-      setDateFrom(ymd(s)); setDateTo(ymd(now));
-    }
+    if (p === 'today') { const s = ymd(now); setDateFrom(s); setDateTo(s); }
+    else if (p === 'yesterday') { const y = new Date(now); y.setDate(y.getDate() - 1); const s = ymd(y); setDateFrom(s); setDateTo(s); }
+    else if (p === '7d') { const s = new Date(now); s.setDate(s.getDate() - 6); setDateFrom(ymd(s)); setDateTo(ymd(now)); }
+    else if (p === '30d') { const s = new Date(now); s.setDate(s.getDate() - 29); setDateFrom(ymd(s)); setDateTo(ymd(now)); }
+    else if (p === 'month') { const s = new Date(now.getFullYear(), now.getMonth(), 1); setDateFrom(ymd(s)); setDateTo(ymd(now)); }
   }, []);
 
   const loadReport = useCallback(async () => {
     if (!user?.tenantId) return;
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
       const fn = httpsCallable(getFirebaseFunctions(), 'getFinancialReport');
-      const res = await fn({
-        dateFrom,
-        dateTo,
-        ...(masterId ? { masterId } : {}),
-      });
+      const res = await fn({ dateFrom, dateTo, ...(masterId ? { masterId } : {}) });
       setReport(res.data as Report);
+      if (showCompare) {
+        const days = Math.max(1, Math.round((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / 86400000) + 1);
+        const prevFrom = shiftDays(dateFrom, -days);
+        const prevTo = shiftDays(dateTo, -days);
+        try {
+          const res2 = await fn({ dateFrom: prevFrom, dateTo: prevTo, ...(masterId ? { masterId } : {}) });
+          setPrevReport(res2.data as Report);
+        } catch { setPrevReport(null); }
+      } else setPrevReport(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить отчёт');
-      setReport(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.tenantId, dateFrom, dateTo, masterId]);
+      setReport(null); setPrevReport(null);
+    } finally { setLoading(false); }
+  }, [user?.tenantId, dateFrom, dateTo, masterId, showCompare]);
 
-  useEffect(() => {
-    void loadReport();
-  }, [loadReport]);
+  useEffect(() => { void loadReport(); }, [loadReport]);
+  useEffect(() => { setPage(1); }, [dateFrom, dateTo, masterId]);
 
   if (!isOwner) {
     return (
       <div className="min-w-0">
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <h1 className="text-xl font-semibold text-[#171717]">Нет доступа</h1>
-          <p className="mt-1 text-sm text-[#8b8781]">
-            Раздел «Финансы» доступен только владельцу салона.
-          </p>
+          <p className="mt-1 text-sm text-[#8b8781]">Раздел «Финансы» доступен только владельцу салона.</p>
         </div>
       </div>
     );
@@ -149,25 +185,94 @@ export default function FinancePage() {
   const totals = report?.totals;
   const byMaster = report?.byMaster || [];
   const byDay = report?.byDay || [];
+  const totalPages = Math.max(1, Math.ceil(byDay.length / PAGE_SIZE));
+  const pagedDays = byDay.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const sumByDay = byDay.reduce((acc, r) => {
+    acc.appointmentsCount += r.appointmentsCount; acc.totalPriceKzt += r.totalPriceKzt;
+    acc.masterEarningKzt += r.masterEarningKzt; acc.salonRevenueKzt += r.salonRevenueKzt;
+    return acc;
+  }, { appointmentsCount: 0, totalPriceKzt: 0, masterEarningKzt: 0, salonRevenueKzt: 0 });
+
+  const sumByMaster = byMaster.reduce((acc, r) => {
+    acc.appointmentsCount += r.appointmentsCount; acc.totalPriceKzt += r.totalPriceKzt;
+    acc.masterEarningKzt += r.masterEarningKzt; acc.salonRevenueKzt += r.salonRevenueKzt;
+    return acc;
+  }, { appointmentsCount: 0, totalPriceKzt: 0, masterEarningKzt: 0, salonRevenueKzt: 0 });
+
+  const handleExportCsv = () => {
+    if (!report) return;
+    const rows: string[][] = [];
+    rows.push(['Отчёт за период', `${fmtDateRu(dateFrom)} — ${fmtDateRu(dateTo)}`]);
+    rows.push([]);
+    rows.push(['Сводка']);
+    rows.push(['Показатель', 'Значение']);
+    rows.push(['Выручка салона', String(totals?.salonRevenueKzt ?? 0)]);
+    rows.push(['Выплаты мастерам', String(totals?.masterEarningKzt ?? 0)]);
+    rows.push(['Общая сумма', String(totals?.totalPriceKzt ?? 0)]);
+    rows.push(['Визитов', String(totals?.appointmentsCount ?? 0)]);
+    rows.push([]);
+    rows.push(['По дням']);
+    rows.push(['Дата', 'Визитов', 'Общая', 'Мастеру', 'Салону']);
+    byDay.forEach((r) => rows.push([fmtDateRu(r.date), String(r.appointmentsCount), String(r.totalPriceKzt), String(r.masterEarningKzt), String(r.salonRevenueKzt)]));
+    rows.push(['ИТОГО', String(sumByDay.appointmentsCount), String(sumByDay.totalPriceKzt), String(sumByDay.masterEarningKzt), String(sumByDay.salonRevenueKzt)]);
+    rows.push([]);
+    rows.push(['По мастерам']);
+    rows.push(['Мастер', 'Визитов', 'Общая', 'Мастеру', 'Салону']);
+    byMaster.forEach((r) => rows.push([r.masterName, String(r.appointmentsCount), String(r.totalPriceKzt), String(r.masterEarningKzt), String(r.salonRevenueKzt)]));
+    rows.push(['ИТОГО', String(sumByMaster.appointmentsCount), String(sumByMaster.totalPriceKzt), String(sumByMaster.masterEarningKzt), String(sumByMaster.salonRevenueKzt)]);
+
+    const fname = `finance_${dateFrom}_${dateTo}${masterId ? '_' + (masters.find((m) => m.id === masterId)?.name || 'master') : ''}.csv`;
+    downloadCsv(fname, rows);
+  };
+
+  const cmpDelta = (cur: number, prev: number): { label: string; cls: string } => {
+    if (prev === 0 && cur === 0) return { label: '—', cls: 'text-[#8b8781]' };
+    if (prev === 0) return { label: '+∞', cls: 'text-green-600' };
+    const d = ((cur - prev) / Math.abs(prev)) * 100;
+    const cls = d > 0 ? 'text-green-600' : d < 0 ? 'text-red-600' : 'text-[#8b8781]';
+    return { label: (d > 0 ? '+' : '') + d.toFixed(1) + '%', cls };
+  };
 
   return (
     <div className="min-w-0">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#aaa6a0]">
-          Учёт и отчёты
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-block { display: block !important; }
+          body { background: #fff !important; }
+          .rounded-2xl, .shadow-sm { box-shadow: none !important; }
+        }
+      `}</style>
+
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 no-print">
+        <div>
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#aaa6a0]">Учёт и отчёты</div>
+          <h1 className="text-[28px] font-semibold tracking-[-0.035em] text-[#171717]">Финансы</h1>
+          <p className="mt-1 text-sm text-[#8b8781]">Выручка салона и выплаты мастерам за выбранный период</p>
         </div>
-        <h1 className="text-[28px] font-semibold tracking-[-0.035em] text-[#171717]">
-          Финансы
-        </h1>
-        <p className="mt-1 text-sm text-[#8b8781]">
-          Выручка салона и выплаты мастерам за выбранный период
-        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={!report || byDay.length === 0}
+            className="h-10 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-[#171717] transition hover:border-black disabled:opacity-40"
+          >
+            Скачать CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            disabled={!report}
+            className="h-10 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-[#171717] transition hover:border-black disabled:opacity-40"
+          >
+            Печать
+          </button>
+        </div>
       </div>
 
-      {/* Фильтры */}
-      <div className="mb-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 no-print">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           {([
             { key: 'today', label: 'Сегодня' },
             { key: 'yesterday', label: 'Вчера' },
@@ -181,99 +286,78 @@ export default function FinancePage() {
               onClick={() => applyPreset(p.key)}
               className={
                 'h-9 rounded-full px-4 text-xs font-medium transition ' +
-                (preset === p.key
-                  ? 'bg-black text-white'
-                  : 'border border-gray-200 bg-white text-[#77736d] hover:border-black hover:text-[#171717]')
+                (preset === p.key ? 'bg-black text-white' : 'border border-gray-200 bg-white text-[#77736d] hover:border-black hover:text-[#171717]')
               }
             >
               {p.label}
             </button>
           ))}
+          <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-[#77736d]">
+            <input type="checkbox" checked={showCompare} onChange={(e) => setShowCompare(e.target.checked)} className="h-4 w-4" />
+            Сравнить с предыдущим
+          </label>
         </div>
 
         <div className="grid gap-3 md:grid-cols-4">
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-[#77736d]">С даты</span>
-            <input
-              type="date"
-              value={dateFrom}
-              max={dateTo || undefined}
+            <input type="date" value={dateFrom} max={dateTo || undefined}
               onChange={(e) => { setDateFrom(e.target.value); setPreset('custom'); }}
-              className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-[#171717] outline-none transition focus:border-black"
-            />
+              className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-[#171717] outline-none transition focus:border-black" />
           </label>
-
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-[#77736d]">По дату</span>
-            <input
-              type="date"
-              value={dateTo}
-              min={dateFrom || undefined}
+            <input type="date" value={dateTo} min={dateFrom || undefined}
               onChange={(e) => { setDateTo(e.target.value); setPreset('custom'); }}
-              className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-[#171717] outline-none transition focus:border-black"
-            />
+              className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-[#171717] outline-none transition focus:border-black" />
           </label>
-
-          <label className="block md:col-span-1">
+          <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-[#77736d]">Мастер</span>
-            <select
-              value={masterId}
-              onChange={(e) => setMasterId(e.target.value)}
-              className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-[#171717] outline-none transition focus:border-black"
-            >
+            <select value={masterId} onChange={(e) => setMasterId(e.target.value)}
+              className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-[#171717] outline-none transition focus:border-black">
               <option value="">Все мастера</option>
-              {masters.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              {masters.map((m) => (<option key={m.id} value={m.id}>{m.name}</option>))}
             </select>
           </label>
-
           <div className="flex items-end">
-            <button
-              type="button"
-              onClick={() => void loadReport()}
-              disabled={loading}
-              className="h-11 w-full rounded-xl bg-[#171717] text-sm font-medium text-white transition hover:bg-[#292929] disabled:cursor-not-allowed disabled:opacity-50"
-            >
+            <button type="button" onClick={() => void loadReport()} disabled={loading}
+              className="h-11 w-full rounded-xl bg-[#171717] text-sm font-medium text-white transition hover:bg-[#292929] disabled:cursor-not-allowed disabled:opacity-50">
               {loading ? 'Загрузка…' : 'Показать'}
             </button>
           </div>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error && (<div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>)}
 
-      {/* Сводка */}
       {totals && (
         <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Card label="Выручка салона" value={fmtKzt(totals.salonRevenueKzt)} />
-          <Card label="Выплаты мастерам" value={fmtKzt(totals.masterEarningKzt)} />
-          <Card label="Общая сумма" value={fmtKzt(totals.totalPriceKzt)} />
-          <Card label="Визитов" value={String(totals.appointmentsCount)} />
+          <Card label="Выручка салона" value={fmtKzt(totals.salonRevenueKzt)} delta={prevReport ? cmpDelta(totals.salonRevenueKzt, prevReport.totals.salonRevenueKzt) : undefined} />
+          <Card label="Выплаты мастерам" value={fmtKzt(totals.masterEarningKzt)} delta={prevReport ? cmpDelta(totals.masterEarningKzt, prevReport.totals.masterEarningKzt) : undefined} />
+          <Card label="Общая сумма" value={fmtKzt(totals.totalPriceKzt)} delta={prevReport ? cmpDelta(totals.totalPriceKzt, prevReport.totals.totalPriceKzt) : undefined} />
+          <Card label="Визитов" value={String(totals.appointmentsCount)} delta={prevReport ? cmpDelta(totals.appointmentsCount, prevReport.totals.appointmentsCount) : undefined} />
         </div>
       )}
 
       {totals && totals.compensationMissingCount > 0 && (
         <div className="mb-5 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          У {totals.compensationMissingCount} визитов не настроена компенсация мастера — вся сумма ушла в салон.
-          Настройте компенсацию в разделе «Мастера».
+          У {totals.compensationMissingCount} визитов не настроена компенсация мастера — вся сумма ушла в салон. Настройте компенсацию в разделе «Мастера».
         </div>
       )}
 
-      {/* По дням */}
+      {byDay.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-3 text-base font-semibold text-[#171717]">Выручка салона по дням</h2>
+          <BarChart data={byDay} />
+        </section>
+      )}
+
       <section className="mb-6">
         <h2 className="mb-3 text-base font-semibold text-[#171717]">По дням</h2>
         {byDay.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-[#8b8781] shadow-sm">
-            За выбранный период записей нет.
-          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-[#8b8781] shadow-sm">За выбранный период записей нет.</div>
         ) : (
           <>
-            {/* Desktop table */}
             <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block">
               <table className="w-full text-sm">
                 <thead className="bg-[#faf9f7] text-xs uppercase tracking-wider text-[#8b8781]">
@@ -286,7 +370,7 @@ export default function FinancePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {byDay.map((row) => (
+                  {pagedDays.map((row) => (
                     <tr key={row.date}>
                       <td className="px-4 py-3 font-medium text-[#171717]">{fmtDateRu(row.date)}</td>
                       <td className="px-4 py-3 text-right text-[#404040]">{row.appointmentsCount}</td>
@@ -296,42 +380,47 @@ export default function FinancePage() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="border-t-2 border-gray-200 bg-[#faf9f7] text-sm font-semibold text-[#171717]">
+                  <tr>
+                    <td className="px-4 py-3">Итого</td>
+                    <td className="px-4 py-3 text-right">{sumByDay.appointmentsCount}</td>
+                    <td className="px-4 py-3 text-right">{fmtKzt(sumByDay.totalPriceKzt)}</td>
+                    <td className="px-4 py-3 text-right">{fmtKzt(sumByDay.masterEarningKzt)}</td>
+                    <td className="px-4 py-3 text-right">{fmtKzt(sumByDay.salonRevenueKzt)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
-            {/* Mobile cards */}
             <div className="space-y-2 md:hidden">
-              {byDay.map((row) => (
+              {pagedDays.map((row) => (
                 <div key={row.date} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
                     <b className="text-sm text-[#171717]">{fmtDateRu(row.date)}</b>
                     <span className="text-xs text-[#8b8781]">{row.appointmentsCount} визитов</span>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-sm">
-                    <span className="text-[#8b8781]">Общая</span>
-                    <span className="text-[#171717]">{fmtKzt(row.totalPriceKzt)}</span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-sm">
-                    <span className="text-[#8b8781]">Мастеру</span>
-                    <span className="text-[#404040]">{fmtKzt(row.masterEarningKzt)}</span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-sm">
-                    <span className="text-[#8b8781]">Салону</span>
-                    <b className="text-[#171717]">{fmtKzt(row.salonRevenueKzt)}</b>
-                  </div>
+                  <div className="mt-2 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Общая</span><span className="text-[#171717]">{fmtKzt(row.totalPriceKzt)}</span></div>
+                  <div className="mt-1 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Мастеру</span><span className="text-[#404040]">{fmtKzt(row.masterEarningKzt)}</span></div>
+                  <div className="mt-1 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Салону</span><b className="text-[#171717]">{fmtKzt(row.salonRevenueKzt)}</b></div>
                 </div>
               ))}
             </div>
+            {totalPages > 1 && (
+              <div className="mt-3 flex items-center justify-center gap-2 no-print">
+                <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                  className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-[#171717] hover:border-black disabled:opacity-40">← Назад</button>
+                <span className="text-sm text-[#8b8781]">Стр. {page} из {totalPages}</span>
+                <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                  className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-[#171717] hover:border-black disabled:opacity-40">Вперёд →</button>
+              </div>
+            )}
           </>
         )}
       </section>
 
-      {/* По мастерам */}
       <section>
         <h2 className="mb-3 text-base font-semibold text-[#171717]">По мастерам</h2>
         {byMaster.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-[#8b8781] shadow-sm">
-            За выбранный период записей нет.
-          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-[#8b8781] shadow-sm">За выбранный период записей нет.</div>
         ) : (
           <>
             <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block">
@@ -347,7 +436,8 @@ export default function FinancePage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {byMaster.map((row) => (
-                    <tr key={row.masterId}>
+                    <tr key={row.masterId} className="cursor-pointer transition hover:bg-[#faf9f7]"
+                      onClick={() => setMasterId(row.masterId)}>
                       <td className="px-4 py-3 font-medium text-[#171717]">{row.masterName}</td>
                       <td className="px-4 py-3 text-right text-[#404040]">{row.appointmentsCount}</td>
                       <td className="px-4 py-3 text-right text-[#171717]">{fmtKzt(row.totalPriceKzt)}</td>
@@ -356,28 +446,29 @@ export default function FinancePage() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="border-t-2 border-gray-200 bg-[#faf9f7] text-sm font-semibold text-[#171717]">
+                  <tr>
+                    <td className="px-4 py-3">Итого</td>
+                    <td className="px-4 py-3 text-right">{sumByMaster.appointmentsCount}</td>
+                    <td className="px-4 py-3 text-right">{fmtKzt(sumByMaster.totalPriceKzt)}</td>
+                    <td className="px-4 py-3 text-right">{fmtKzt(sumByMaster.masterEarningKzt)}</td>
+                    <td className="px-4 py-3 text-right">{fmtKzt(sumByMaster.salonRevenueKzt)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
             <div className="space-y-2 md:hidden">
               {byMaster.map((row) => (
-                <div key={row.masterId} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <button key={row.masterId} type="button" onClick={() => setMasterId(row.masterId)}
+                  className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-black">
                   <div className="flex items-center justify-between">
                     <b className="text-sm text-[#171717]">{row.masterName}</b>
                     <span className="text-xs text-[#8b8781]">{row.appointmentsCount} визитов</span>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-sm">
-                    <span className="text-[#8b8781]">Общая</span>
-                    <span className="text-[#171717]">{fmtKzt(row.totalPriceKzt)}</span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-sm">
-                    <span className="text-[#8b8781]">Заработал</span>
-                    <b className="text-[#171717]">{fmtKzt(row.masterEarningKzt)}</b>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-sm">
-                    <span className="text-[#8b8781]">Салону</span>
-                    <span className="text-[#404040]">{fmtKzt(row.salonRevenueKzt)}</span>
-                  </div>
-                </div>
+                  <div className="mt-2 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Общая</span><span className="text-[#171717]">{fmtKzt(row.totalPriceKzt)}</span></div>
+                  <div className="mt-1 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Заработал</span><b className="text-[#171717]">{fmtKzt(row.masterEarningKzt)}</b></div>
+                  <div className="mt-1 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Салону</span><span className="text-[#404040]">{fmtKzt(row.salonRevenueKzt)}</span></div>
+                </button>
               ))}
             </div>
           </>
@@ -387,11 +478,14 @@ export default function FinancePage() {
   );
 }
 
-function Card({ label, value }: { label: string; value: string }) {
+function Card({ label, value, delta }: { label: string; value: string; delta?: { label: string; cls: string } }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="text-xs text-[#8b8781]">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-[#171717]">{value}</div>
+      <div className="mt-1 flex items-baseline justify-between gap-2">
+        <div className="text-lg font-semibold text-[#171717]">{value}</div>
+        {delta && <span className={`text-xs font-medium ${delta.cls}`}>{delta.label}</span>}
+      </div>
     </div>
   );
 }
