@@ -235,11 +235,12 @@ export default function EditCategoryModal(props: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/50"
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+      <div className="flex min-h-full items-end justify-center p-4 sm:items-center">
+        <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">
             Редактировать категорию
@@ -371,6 +372,7 @@ export default function EditCategoryModal(props: Props) {
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

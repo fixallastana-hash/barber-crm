@@ -46,6 +46,7 @@ export function IconCropper({
 
   const [imageSrc, setImageSrc] = useState('');
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [viewportSize, setViewportSize] = useState(0);
   const [positionX, setPositionX] = useState(
     clamp(initialPositionX, 0, 100),
   );
@@ -57,6 +58,15 @@ export function IconCropper({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const update = () => setViewportSize(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const objectUrl = URL.createObjectURL(file);
@@ -234,14 +244,10 @@ export function IconCropper({
   };
 
   const previewDimensions = (() => {
-    if (!imageSize.width || !imageSize.height) {
-      return {
-        width: '100%',
-        height: '100%',
-      };
+    if (!imageSize.width || !imageSize.height || !viewportSize) {
+      return { width: 0, height: 0 };
     }
 
-    const viewportSize = 256;
     const coverScale = Math.max(
       viewportSize / imageSize.width,
       viewportSize / imageSize.height,
@@ -254,12 +260,14 @@ export function IconCropper({
   })();
 
   const previewLeft =
-    -(Number(previewDimensions.width) - 256) *
-    (positionX / 100);
+    viewportSize > 0
+      ? -(previewDimensions.width - viewportSize) * (positionX / 100)
+      : 0;
 
   const previewTop =
-    -(Number(previewDimensions.height) - 256) *
-    (positionY / 100);
+    viewportSize > 0
+      ? -(previewDimensions.height - viewportSize) * (positionY / 100)
+      : 0;
 
   return (
     <div className="space-y-4">
