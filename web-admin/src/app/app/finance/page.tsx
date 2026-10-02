@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseDb, getFirebaseFunctions } from '@/lib/firebase';
@@ -15,6 +16,7 @@ type Preset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'custom';
 
 const PAGE_SIZE = 30;
 const BAR_COLOR = '#F4C842';
+const LARGE_PAYOUT_THRESHOLD = 50000;
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -35,6 +37,24 @@ function downloadCsv(filename: string, rows: string[][]) {
   };
   const csv = rows.map((r) => r.map(escape).join(';')).join('\r\n');
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadXls(filename: string, rows: string[][]) {
+  const escape = (v: string) =>
+    String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const body = rows
+    .map((r) => '<tr>' + r.map((c) => `<td>${escape(c)}</td>`).join('') + '</tr>')
+    .join('');
+  const html = `<html><head><meta charset="utf-8"></head><body><table border="1">${body}</table></body></html>`;
+  const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -106,6 +126,7 @@ function BarChart({ data }: { data: ByDayRow[] }) {
 export default function FinancePage() {
   const { user } = useAuth();
   const isOwner = user?.role === 'owner';
+  const router = useRouter();
 
   const todayStr = useMemo(() => ymd(new Date()), []);
   const [preset, setPreset] = useState<Preset>('today');
@@ -200,8 +221,7 @@ export default function FinancePage() {
     return acc;
   }, { appointmentsCount: 0, totalPriceKzt: 0, masterEarningKzt: 0, salonRevenueKzt: 0 });
 
-  const handleExportCsv = () => {
-    if (!report) return;
+  const buildReportRows = (): string[][] => {
     const rows: string[][] = [];
     rows.push(['Отчёт за период', `${fmtDateRu(dateFrom)} — ${fmtDateRu(dateTo)}`]);
     rows.push([]);
@@ -222,8 +242,20 @@ export default function FinancePage() {
     byMaster.forEach((r) => rows.push([r.masterName, String(r.appointmentsCount), String(r.totalPriceKzt), String(r.masterEarningKzt), String(r.salonRevenueKzt)]));
     rows.push(['ИТОГО', String(sumByMaster.appointmentsCount), String(sumByMaster.totalPriceKzt), String(sumByMaster.masterEarningKzt), String(sumByMaster.salonRevenueKzt)]);
 
-    const fname = `finance_${dateFrom}_${dateTo}${masterId ? '_' + (masters.find((m) => m.id === masterId)?.name || 'master') : ''}.csv`;
-    downloadCsv(fname, rows);
+    return rows;
+  };
+
+  const buildFilename = (ext: string) =>
+    `finance_${dateFrom}_${dateTo}${masterId ? '_' + (masters.find((m) => m.id === masterId)?.name || 'master') : ''}.${ext}`;
+
+  const handleExportCsv = () => {
+    if (!report) return;
+    downloadCsv(buildFilename('csv'), buildReportRows());
+  };
+
+  const handleExportXls = () => {
+    if (!report) return;
+    downloadXls(buildFilename('xls'), buildReportRows());
   };
 
   const cmpDelta = (cur: number, prev: number): { label: string; cls: string } => {
@@ -259,6 +291,14 @@ export default function FinancePage() {
             className="h-10 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-[#171717] transition hover:border-black disabled:opacity-40"
           >
             Скачать CSV
+          </button>
+          <button
+            type="button"
+            onClick={handleExportXls}
+            disabled={!report || byDay.length === 0}
+            className="h-10 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-[#171717] transition hover:border-black disabled:opacity-40"
+          >
+            Для 1С (.xls)
           </button>
           <button
             type="button"
@@ -345,6 +385,12 @@ export default function FinancePage() {
         </div>
       )}
 
+      {totals && totals.masterEarningKzt >= LARGE_PAYOUT_THRESHOLD && (
+        <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+          <b>Крупная выплата мастерам:</b> {fmtKzt(totals.masterEarningKzt)} за период. Проверьте корректность записей — порог {fmtKzt(LARGE_PAYOUT_THRESHOLD)}.
+        </div>
+      )}
+
       {byDay.length > 0 && (
         <section className="mb-6">
           <h2 className="mb-3 text-base font-semibold text-[#171717]">Выручка салона по дням</h2>
@@ -371,7 +417,11 @@ export default function FinancePage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {pagedDays.map((row) => (
-                    <tr key={row.date}>
+                    <tr
+                      key={row.date}
+                      className="cursor-pointer transition hover:bg-[#faf9f7]"
+                      onClick={() => router.push(`/app/calendar?date=${row.date}`)}
+                    >
                       <td className="px-4 py-3 font-medium text-[#171717]">{fmtDateRu(row.date)}</td>
                       <td className="px-4 py-3 text-right text-[#404040]">{row.appointmentsCount}</td>
                       <td className="px-4 py-3 text-right text-[#171717]">{fmtKzt(row.totalPriceKzt)}</td>
@@ -393,7 +443,12 @@ export default function FinancePage() {
             </div>
             <div className="space-y-2 md:hidden">
               {pagedDays.map((row) => (
-                <div key={row.date} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <button
+                  key={row.date}
+                  type="button"
+                  onClick={() => router.push(`/app/calendar?date=${row.date}`)}
+                  className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-black"
+                >
                   <div className="flex items-center justify-between">
                     <b className="text-sm text-[#171717]">{fmtDateRu(row.date)}</b>
                     <span className="text-xs text-[#8b8781]">{row.appointmentsCount} визитов</span>
@@ -401,7 +456,7 @@ export default function FinancePage() {
                   <div className="mt-2 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Общая</span><span className="text-[#171717]">{fmtKzt(row.totalPriceKzt)}</span></div>
                   <div className="mt-1 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Мастеру</span><span className="text-[#404040]">{fmtKzt(row.masterEarningKzt)}</span></div>
                   <div className="mt-1 flex items-center justify-between text-sm"><span className="text-[#8b8781]">Салону</span><b className="text-[#171717]">{fmtKzt(row.salonRevenueKzt)}</b></div>
-                </div>
+                </button>
               ))}
             </div>
             {totalPages > 1 && (
