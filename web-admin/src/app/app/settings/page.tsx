@@ -18,6 +18,7 @@ type SalonInfo = {
   noshowBlockThreshold: number;
   requireConfirmation: boolean;
   pendingConfirmationTimeoutMinutes: number;
+  slotStepMinutes?: number;
   widgetSlug: string;
 };
 
@@ -45,7 +46,7 @@ export default function SettingsPage() {
         if (cancelled) return;
         if (snap.exists()) {
           const salonInfo = snap.data() as SalonInfo;
-          setInfo(salonInfo);
+          setInfo({ ...salonInfo, slotStepMinutes: salonInfo.slotStepMinutes || 15 });
           setSlug(salonInfo.widgetSlug || '');
         }
         setLoading(false);
@@ -341,6 +342,42 @@ export default function SettingsPage() {
             Требовать подтверждения новых записей
           </span>
         </label>
+        <div>
+          <span className="mb-2 block text-sm text-gray-700">Шаг слотов в календаре</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {[10, 15, 20, 30].map((step) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => setInfo({ ...info, slotStepMinutes: step })}
+                className={
+                  'h-10 rounded-lg border px-4 text-sm font-medium transition ' +
+                  ((info.slotStepMinutes || 15) === step
+                    ? 'border-black bg-black text-white'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-black')
+                }
+              >
+                {step} мин
+              </button>
+            ))}
+            <input
+              type="number"
+              min={5}
+              max={60}
+              step={5}
+              value={info.slotStepMinutes || 15}
+              onChange={(e) => {
+                const v = Math.min(60, Math.max(5, Math.round(Number(e.target.value) || 5)));
+                setInfo({ ...info, slotStepMinutes: v });
+              }}
+              className="h-10 w-24 rounded-lg border border-gray-300 px-3 text-right text-sm"
+            />
+            <span className="text-sm text-gray-500">мин</span>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            От 5 до 60 минут. Быстрые варианты: 15 (барбершоп), 30 (салоны красоты).
+          </p>
+        </div>
         <button
           type="submit"
           disabled={saving}

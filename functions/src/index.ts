@@ -1170,6 +1170,9 @@ export const widgetGetSlots = onCall({ invoker: 'public' }, async (request) => {
   const master = masterSnap.data()!;
   if (!master.isActive) return { slots: [] };
 
+    const infoSnap = await db.doc('tenants/' + tenantId + '/config/info').get();
+    const rawStep = infoSnap.exists ? Number(infoSnap.data()!.slotStepMinutes) : 15;
+    const slotStep = Number.isFinite(rawStep) && rawStep > 0 && rawStep <= 60 ? Math.round(rawStep) : 15;
   const weekday = dayOfWeekKey(date);
   const daySchedule = master.schedule?.[weekday];
   if (!daySchedule || !daySchedule.isWorking) return { slots: [] };
@@ -1190,7 +1193,7 @@ export const widgetGetSlots = onCall({ invoker: 'public' }, async (request) => {
     let cursor = shift.start;
     while (cursor + durationMinutes <= shift.end) {
       if (isToday && cursor < minStart) {
-        cursor += 15;
+        cursor += slotStep;
         continue;
       }
       const slotEnd = cursor + durationMinutes;
@@ -1204,7 +1207,7 @@ export const widgetGetSlots = onCall({ invoker: 'public' }, async (request) => {
           time: String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'),
         });
       }
-      cursor += 15;
+      cursor += slotStep;
     }
   }
   return { slots };
@@ -1494,6 +1497,10 @@ export const createAppointment = onCall(async (request) => {
   const date = data.date;
   const startMinutes = Number(data.startMinutes);
   const source = data.source || 'admin';
+  const discountPercentRaw = Number((data as { discountPercent?: unknown }).discountPercent || 0);
+  const discountPercent = Number.isFinite(discountPercentRaw)
+    ? Math.min(50, Math.max(0, Math.round(discountPercentRaw)))
+    : 0;
 
   if (!masterId) throw new HttpsError('invalid-argument', 'masterId is required');
   if (!clientId) throw new HttpsError('invalid-argument', 'clientId is required');
@@ -1514,7 +1521,10 @@ export const createAppointment = onCall(async (request) => {
 
   const services = serviceSnaps.map((s) => s.data()!);
   const totalDuration = services.reduce((sum, s) => sum + Number(s.durationMinutes || 0), 0);
-  const totalPrice = services.reduce((sum, s) => sum + Number(s.priceKzt || 0), 0);
+  const originalPrice = services.reduce((sum, s) => sum + Number(s.priceKzt || 0), 0);
+  const totalPrice = discountPercent > 0
+    ? Math.round(originalPrice * (1 - discountPercent / 100))
+    : originalPrice;
   const bufferMinutes = Math.max(...services.map((s) => Number(s.bufferMinutes || 0)));
   const serviceNames = services.map((s) => s.name as string);
 
@@ -1574,6 +1584,7 @@ export const createAppointment = onCall(async (request) => {
       endMinutes,
       durationMinutes: totalDuration,
       totalPriceKzt: totalPrice,
+      ...(discountPercent > 0 ? { originalPriceKzt: originalPrice, discountPercent } : {}),
       status: 'confirmed',
       source,
       processedEvents: [],
@@ -2724,14 +2735,6 @@ export const cancelAppointmentGroup = onCall(async (request) => {
 });
 
 // ============ createGroupAppointment (admin) ============
-
-type AdminGroupPersonInput = {
-  clientName?: string;
-  masterId?: string;
-  serviceIds?: string[];
-  startMinutes?: number;
-};
-
 function normalizePhoneRaw(input: string): string {
   const digits = input.replace(/\D/g, '');
   if (digits.length === 11 && digits.startsWith('8')) return '+7' + digits.slice(1);
@@ -2745,94 +2748,119 @@ export const createGroupAppointment = onCall(async (request) => {
   requireOwnerOrAdmin(role);
 
   const data = request.data || {};
-  const clientIdInput = typeof data.clientId === 'string' ? data.clientId.trim() : '';
-  const clientNameInput = typeof data.clientName === 'string' ? data.clientName.trim() : '';
-  const clientPhoneInput = typeof data.clientPhone === 'string' ? data.clientPhone.trim() : '';
   const date = data.date;
-  const people: AdminGroupPersonInput[] = Array.isArray(data.people) ? data.people : [];
+  const clientsInput: Array<{
+    clientId?: string;
+    clientName?: string;
+    clientPhone?: string;
+    people?: Array<{ masterId?: string; serviceIds?: string[]; startMinutes?: number }>;
+  }> = Array.isArray(data.clients) ? data.clients : [];
   const source = typeof data.source === 'string' ? data.source : 'admin';
+  const discountPercentRaw = Number((data as { discountPercent?: unknown }).discountPercent || 0);
+  const discountPercent = Number.isFinite(discountPercentRaw)
+    ? Math.min(50, Math.max(0, Math.round(discountPercentRaw)))
+    : 0;
 
-  if (!clientIdInput && !(clientNameInput && clientPhoneInput)) {
-    throw new HttpsError('invalid-argument', 'clientId or (clientName + clientPhone) required');
-  }
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + 'T12:00:00Z'))) {
     throw new HttpsError('invalid-argument', 'date required');
   }
-  if (!people.length || people.length > 6) {
-    throw new HttpsError('invalid-argument', 'people must be 1..6');
+  if (!clientsInput.length) {
+    throw new HttpsError('invalid-argument', 'clients required');
   }
 
-  for (const p of people) {
-    if (typeof p.clientName !== 'string' || !p.clientName.trim()) {
-      throw new HttpsError('invalid-argument', 'clientName required for each person');
+  for (const c of clientsInput) {
+    const hasId = typeof c.clientId === 'string' && c.clientId.trim();
+    const hasNamePhone = typeof c.clientName === 'string' && c.clientName.trim()
+      && typeof c.clientPhone === 'string' && c.clientPhone.trim();
+    if (!hasId && !hasNamePhone) {
+      throw new HttpsError('invalid-argument', 'clientId or (clientName + clientPhone) required for each client');
     }
-    if (typeof p.masterId !== 'string' || !p.masterId) {
-      throw new HttpsError('invalid-argument', 'masterId required for each person');
+    const pp = Array.isArray(c.people) ? c.people : [];
+    if (!pp.length) {
+      throw new HttpsError('invalid-argument', 'each client must have at least one person');
     }
-    if (!Array.isArray(p.serviceIds) || !p.serviceIds.length) {
-      throw new HttpsError('invalid-argument', 'serviceIds required for each person');
-    }
-    if (!Number.isInteger(p.startMinutes) || (p.startMinutes as number) < 0 || (p.startMinutes as number) >= 1440) {
-      throw new HttpsError('invalid-argument', 'startMinutes required for each person');
-    }
-  }
-
-  let clientId: string;
-  let clientPhone: string;
-
-  if (clientIdInput) {
-    const clientSnap = await db.doc('tenants/' + tenantId + '/clients/' + clientIdInput).get();
-    if (!clientSnap.exists) throw new HttpsError('not-found', 'Client not found');
-    const client = clientSnap.data()!;
-    if (client.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
-    clientId = clientIdInput;
-    clientPhone = ((client.phoneNormalized as string) || '').trim();
-  } else {
-    const digits = clientPhoneInput.replace(/\D/g, '');
-    if (digits.length < 10 || digits.length > 15) {
-      throw new HttpsError('invalid-argument', 'Invalid clientPhone');
-    }
-    const phoneNormalized = normalizePhoneRaw(clientPhoneInput);
-    const phoneIdxRef = db.doc('tenants/' + tenantId + '/clientPhoneIndex/' + phoneNormalized);
-    const phoneIdxSnap = await phoneIdxRef.get();
-
-    if (phoneIdxSnap.exists) {
-      clientId = phoneIdxSnap.data()!.clientId as string;
-      const clientRef = db.doc('tenants/' + tenantId + '/clients/' + clientId);
-      const clientSnap = await clientRef.get();
-      if (!clientSnap.exists) throw new HttpsError('internal', 'Client index is invalid');
-      const existing = clientSnap.data()!;
-      if (existing.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
-      if (existing.name !== clientNameInput && !(existing.nameVariants || []).includes(clientNameInput)) {
-        await clientRef.update({ nameVariants: FieldValue.arrayUnion(clientNameInput) });
+    for (const p of pp) {
+      if (typeof p.masterId !== 'string' || !p.masterId) {
+        throw new HttpsError('invalid-argument', 'masterId required');
       }
-      clientPhone = phoneNormalized;
-    } else {
-      const newClientRef = db.collection('tenants/' + tenantId + '/clients').doc();
-      clientId = newClientRef.id;
-      const batch = db.batch();
-      batch.set(newClientRef, {
-        name: clientNameInput,
-        phoneNormalized,
-        nameVariants: [],
-        totalVisits: 0,
-        totalSpentKzt: 0,
-        noshowCount: 0,
-        isBlocked: false,
-        marketingOptOut: false,
-        consentGivenAt: FieldValue.serverTimestamp(),
-        createdAt: FieldValue.serverTimestamp(),
-        _schemaVersion: 4,
-      });
-      batch.set(phoneIdxRef, { clientId });
-      await batch.commit();
-      clientPhone = phoneNormalized;
+      if (!Array.isArray(p.serviceIds) || !p.serviceIds.length) {
+        throw new HttpsError('invalid-argument', 'serviceIds required');
+      }
+      if (!Number.isInteger(p.startMinutes) || (p.startMinutes as number) < 0 || (p.startMinutes as number) >= 1440) {
+        throw new HttpsError('invalid-argument', 'startMinutes required');
+      }
     }
   }
 
   const weekday = dayOfWeekKey(date);
+  const resolvedClients: Array<{ clientId: string; clientPhone: string; clientName: string }> = [];
+
+  for (const c of clientsInput) {
+    const clientIdInput = typeof c.clientId === 'string' ? c.clientId.trim() : '';
+    const clientNameInput = typeof c.clientName === 'string' ? c.clientName.trim() : '';
+    const clientPhoneInput = typeof c.clientPhone === 'string' ? c.clientPhone.trim() : '';
+
+    if (clientIdInput) {
+      const clientSnap = await db.doc('tenants/' + tenantId + '/clients/' + clientIdInput).get();
+      if (!clientSnap.exists) throw new HttpsError('not-found', 'Client not found');
+      const client = clientSnap.data()!;
+      if (client.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
+      resolvedClients.push({
+        clientId: clientIdInput,
+        clientPhone: ((client.phoneNormalized as string) || '').trim(),
+        clientName: (client.name as string) || clientNameInput || 'Клиент',
+      });
+    } else {
+      const digits = clientPhoneInput.replace(/\D/g, '');
+      if (digits.length < 10 || digits.length > 15) {
+        throw new HttpsError('invalid-argument', 'Invalid clientPhone');
+      }
+      const phoneNormalized = normalizePhoneRaw(clientPhoneInput);
+      const phoneIdxRef = db.doc('tenants/' + tenantId + '/clientPhoneIndex/' + phoneNormalized);
+      const phoneIdxSnap = await phoneIdxRef.get();
+
+      if (phoneIdxSnap.exists) {
+        const cid = phoneIdxSnap.data()!.clientId as string;
+        const clientRef = db.doc('tenants/' + tenantId + '/clients/' + cid);
+        const clientSnap = await clientRef.get();
+        if (!clientSnap.exists) throw new HttpsError('internal', 'Client index is invalid');
+        const existing = clientSnap.data()!;
+        if (existing.isBlocked === true) throw new HttpsError('permission-denied', 'Client is blocked');
+        if (existing.name !== clientNameInput && !(existing.nameVariants || []).includes(clientNameInput)) {
+          await clientRef.update({ nameVariants: FieldValue.arrayUnion(clientNameInput) });
+        }
+        resolvedClients.push({
+          clientId: cid,
+          clientPhone: phoneNormalized,
+          clientName: (existing.name as string) || clientNameInput,
+        });
+      } else {
+        const newClientRef = db.collection('tenants/' + tenantId + '/clients').doc();
+        const newId = newClientRef.id;
+        const batch = db.batch();
+        batch.set(newClientRef, {
+          name: clientNameInput,
+          phoneNormalized,
+          nameVariants: [],
+          totalVisits: 0,
+          totalSpentKzt: 0,
+          noshowCount: 0,
+          isBlocked: false,
+          marketingOptOut: false,
+          consentGivenAt: FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
+          _schemaVersion: 4,
+        });
+        batch.set(phoneIdxRef, { clientId: newId });
+        await batch.commit();
+        resolvedClients.push({ clientId: newId, clientPhone: phoneNormalized, clientName: clientNameInput });
+      }
+    }
+  }
 
   type ResolvedPerson = {
+    clientId: string;
+    clientPhone: string;
     clientName: string;
     masterId: string;
     masterName: string;
@@ -2840,6 +2868,7 @@ export const createGroupAppointment = onCall(async (request) => {
     serviceNames: string[];
     durationMinutes: number;
     totalPrice: number;
+    originalPrice: number;
     bufferMinutes: number;
     branchId: string;
     startMinutes: number;
@@ -2849,56 +2878,80 @@ export const createGroupAppointment = onCall(async (request) => {
 
   const resolved: ResolvedPerson[] = [];
 
-  for (const p of people) {
-    const pMasterId = p.masterId as string;
-    const pServiceIds = p.serviceIds as string[];
-    const pStartMinutes = p.startMinutes as number;
+  for (let ci = 0; ci < clientsInput.length; ci++) {
+    const rc = resolvedClients[ci];
+    const pp = clientsInput[ci].people || [];
 
-    const serviceSnaps = await Promise.all(
-      pServiceIds.map((id) => db.doc('tenants/' + tenantId + '/services/' + id).get())
-    );
-    if (serviceSnaps.some((s) => !s.exists)) {
-      throw new HttpsError('not-found', 'Service not found');
+    for (const p of pp) {
+      const pMasterId = p.masterId as string;
+      const pServiceIds = p.serviceIds as string[];
+      const pStartMinutes = p.startMinutes as number;
+
+      const serviceSnaps = await Promise.all(
+        pServiceIds.map((id) => db.doc('tenants/' + tenantId + '/services/' + id).get())
+      );
+      if (serviceSnaps.some((s) => !s.exists)) throw new HttpsError('not-found', 'Service not found');
+      const services = serviceSnaps.map((s) => s.data()!);
+      if (services.some((s) => s.isActive !== true)) throw new HttpsError('failed-precondition', 'Service not active');
+
+      const durationMinutes = services.reduce((sum, s) => sum + Number(s.durationMinutes || 0), 0);
+      const originalPrice = services.reduce((sum, s) => sum + Number(s.priceKzt || 0), 0);
+      const totalPrice = discountPercent > 0
+        ? Math.round(originalPrice * (1 - discountPercent / 100))
+        : originalPrice;
+      const bufferMinutes = Math.max(...services.map((s) => Number(s.bufferMinutes || 0)), 0);
+      const serviceNames = services.map((s) => s.name as string);
+
+      const masterSnap = await db.doc('tenants/' + tenantId + '/masters/' + pMasterId).get();
+      if (!masterSnap.exists) throw new HttpsError('not-found', 'Master not found');
+      const master = masterSnap.data()!;
+      if (!master.isActive) throw new HttpsError('failed-precondition', 'Master not active');
+      const daySchedule = master.schedule?.[weekday];
+      if (!daySchedule || !daySchedule.isWorking) throw new HttpsError('failed-precondition', 'Master does not work on this day');
+
+      const endMinutes = pStartMinutes + durationMinutes;
+      const ledgerEndMinutes = endMinutes + bufferMinutes;
+
+      const shifts = (daySchedule.shifts || []) as Array<{ start: number; end: number; branchId?: string }>;
+      const shift = shifts.find((s) => pStartMinutes >= s.start && endMinutes <= s.end);
+      if (!shift) throw new HttpsError('failed-precondition', 'Outside hours');
+
+      resolved.push({
+        clientId: rc.clientId,
+        clientPhone: rc.clientPhone,
+        clientName: rc.clientName,
+        masterId: pMasterId,
+        masterName: master.name as string,
+        serviceIds: pServiceIds,
+        serviceNames,
+        durationMinutes,
+        totalPrice,
+        originalPrice,
+        bufferMinutes,
+        branchId: shift.branchId || '',
+        startMinutes: pStartMinutes,
+        endMinutes,
+        ledgerEndMinutes,
+      });
     }
-    const services = serviceSnaps.map((s) => s.data()!);
-    if (services.some((s) => s.isActive !== true)) {
-      throw new HttpsError('failed-precondition', 'Service not active');
+  }
+
+  const slotsByClientCheck = new Map<string, Array<{ start: number; end: number }>>();
+  for (const r of resolved) {
+    const arr = slotsByClientCheck.get(r.clientId) || [];
+    arr.push({ start: r.startMinutes, end: r.endMinutes });
+    slotsByClientCheck.set(r.clientId, arr);
+  }
+  for (const slots of slotsByClientCheck.values()) {
+    for (let i = 0; i < slots.length; i++) {
+      for (let j = i + 1; j < slots.length; j++) {
+        const a = slots[i];
+        const b = slots[j];
+        if (!(a.end <= b.start || a.start >= b.end)) {
+          throw new HttpsError('failed-precondition', 'Один клиент не может быть у двух мастеров в одно время');
+        }
+      }
     }
-    const durationMinutes = services.reduce((sum, s) => sum + Number(s.durationMinutes || 0), 0);
-    const totalPrice = services.reduce((sum, s) => sum + Number(s.priceKzt || 0), 0);
-    const bufferMinutes = Math.max(...services.map((s) => Number(s.bufferMinutes || 0)), 0);
-    const serviceNames = services.map((s) => s.name as string);
-
-    const masterSnap = await db.doc('tenants/' + tenantId + '/masters/' + pMasterId).get();
-    if (!masterSnap.exists) throw new HttpsError('not-found', 'Master not found');
-    const master = masterSnap.data()!;
-    if (!master.isActive) throw new HttpsError('failed-precondition', 'Master not active');
-    const daySchedule = master.schedule?.[weekday];
-    if (!daySchedule || !daySchedule.isWorking) {
-      throw new HttpsError('failed-precondition', 'Master does not work on this day');
-    }
-
-    const endMinutes = pStartMinutes + durationMinutes;
-    const ledgerEndMinutes = endMinutes + bufferMinutes;
-
-    const shifts = (daySchedule.shifts || []) as Array<{ start: number; end: number; branchId?: string }>;
-    const shift = shifts.find((s) => pStartMinutes >= s.start && endMinutes <= s.end);
-    if (!shift) throw new HttpsError('failed-precondition', 'Outside hours');
-
-    resolved.push({
-      clientName: (p.clientName as string).trim(),
-      masterId: pMasterId,
-      masterName: master.name as string,
-      serviceIds: pServiceIds,
-      serviceNames,
-      durationMinutes,
-      totalPrice,
-      bufferMinutes,
-      branchId: shift.branchId || '',
-      startMinutes: pStartMinutes,
-      endMinutes,
-      ledgerEndMinutes,
-    });
   }
 
   const slotsByMasterCheck = new Map<string, Array<{ start: number; end: number; clientName: string }>>();
@@ -2914,10 +2967,8 @@ export const createGroupAppointment = onCall(async (request) => {
         const b = slots[j];
         const overlap = !(a.end <= b.start || a.start >= b.end);
         if (overlap) {
-          throw new HttpsError(
-            'failed-precondition',
-            `Гости «${a.clientName}» и «${b.clientName}» пересекаются по времени у одного мастера. Сдвиньте одного из них.`,
-          );
+          throw new HttpsError('failed-precondition',
+            'Гости «' + a.clientName + '» и «' + b.clientName + '» пересекаются по времени у одного мастера.');
         }
       }
     }
@@ -2957,9 +3008,9 @@ export const createGroupAppointment = onCall(async (request) => {
         branchId: r.branchId,
         masterId: r.masterId,
         masterName: r.masterName,
-        clientId,
+        clientId: r.clientId,
         clientName: r.clientName,
-        clientPhone,
+        clientPhone: r.clientPhone,
         serviceIds: r.serviceIds,
         serviceNames: r.serviceNames,
         date,
@@ -2967,6 +3018,7 @@ export const createGroupAppointment = onCall(async (request) => {
         endMinutes: r.endMinutes,
         durationMinutes: r.durationMinutes,
         totalPriceKzt: r.totalPrice,
+        ...(discountPercent > 0 ? { originalPriceKzt: r.originalPrice, discountPercent } : {}),
         status: 'confirmed',
         source,
         processedEvents: [],
@@ -3009,7 +3061,6 @@ export const createGroupAppointment = onCall(async (request) => {
     success: true,
     groupId,
     appointmentIds: appointmentRefs.map((r) => r.id),
-    clientId,
   };
 });
 // ============ getFinancialReport (owner only) ============
