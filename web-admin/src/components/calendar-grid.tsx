@@ -12,6 +12,8 @@ export type Appointment = {
   startMinutes: number;
   endMinutes: number;
   totalPriceKzt: number;
+  originalPriceKzt?: number;
+  discountPercent?: number;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'noshow';
   groupId?: string;
   groupIndex?: number;
@@ -173,6 +175,10 @@ export function CalendarGrid({
                   );
 
                   const isGroup = !!appointment.groupId;
+                  const hasDiscount =
+                    typeof appointment.discountPercent === 'number' &&
+                    appointment.discountPercent > 0;
+                  const hasBadges = isGroup || hasDiscount;
 
                   return (
                     <button
@@ -186,15 +192,24 @@ export function CalendarGrid({
                       }
                       style={{ top, height }}
                     >
-                      {isGroup && (
-                        <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-black/25 px-1 text-[9px] font-bold leading-tight text-white">
-                          {appointment.groupIndex || 1}/{appointment.groupSize || 1}
+                      {hasBadges && (
+                        <span className="pointer-events-none absolute right-0.5 top-0.5 flex gap-0.5">
+                          {hasDiscount && (
+                            <span className="rounded bg-red-600 px-1 text-[9px] font-bold leading-tight text-white">
+                              −{appointment.discountPercent}%
+                            </span>
+                          )}
+                          {isGroup && (
+                            <span className="rounded bg-black/25 px-1 text-[9px] font-bold leading-tight text-white">
+                              {appointment.groupIndex || 1}/{appointment.groupSize || 1}
+                            </span>
+                          )}
                         </span>
                       )}
                       <span
                         className={
                           'block truncate font-semibold' +
-                          (isGroup ? ' pr-7' : '')
+                          (hasBadges ? ' pr-12' : '')
                         }
                       >
                         {appointment.clientName}

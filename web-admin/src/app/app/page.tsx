@@ -285,20 +285,17 @@ export default function AppIndexPage() {
               </div>
             </div>
 
-            {/* Quick navigation */}
-            <div className="mt-8">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-950">Быстрый доступ</h2>
-                <p className="mt-1 text-sm text-gray-500">Основные разделы управления салоном</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                <QuickLink title="Календарь" description="Записи" onClick={() => router.push('/app/calendar')} />
-                <QuickLink title="Мастера" description="Команда" onClick={() => router.push('/app/masters')} />
-                <QuickLink title="Клиенты" description="База" onClick={() => router.push('/app/clients')} />
-                <QuickLink title="Услуги" description="Прайс" onClick={() => router.push('/app/services')} />
-                <QuickLink title="Филиалы" description="Салон" onClick={() => router.push('/app/branches')} />
-                <QuickLink title="Настройки" description="Салон" onClick={() => router.push('/app/settings')} />
-              </div>
+            {/* Quick navigation — строка пилюль */}
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-xs font-medium uppercase tracking-wider text-gray-400">
+                Быстрый доступ
+              </span>
+              <QuickLink title="Календарь" onClick={() => router.push('/app/calendar')} />
+              <QuickLink title="Мастера" onClick={() => router.push('/app/masters')} />
+              <QuickLink title="Клиенты" onClick={() => router.push('/app/clients')} />
+              <QuickLink title="Услуги" onClick={() => router.push('/app/services')} />
+              <QuickLink title="Филиалы" onClick={() => router.push('/app/branches')} />
+              <QuickLink title="Настройки" onClick={() => router.push('/app/settings')} />
             </div>
           </>
         )}
@@ -322,16 +319,15 @@ function StatCard(props: { label: string; value: string; hint: string; descripti
   );
 }
 
-function QuickLink(props: { title: string; description: string; onClick: () => void }) {
+function QuickLink(props: { title: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
-      className="group rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-sm"
+      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3.5 text-xs font-medium text-gray-700 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition hover:border-gray-900 hover:text-gray-950"
     >
-      <div className="mb-6 flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-xs font-semibold text-gray-600 transition group-hover:bg-gray-950 group-hover:text-white">→</div>
-      <p className="text-sm font-semibold text-gray-900">{props.title}</p>
-      <p className="mt-1 text-xs text-gray-400">{props.description}</p>
+      {props.title}
+      <span className="text-gray-400">→</span>
     </button>
   );
 }
