@@ -6,6 +6,7 @@ import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
 import { BookSkeleton } from '@/components/book-skeleton';
 import { GroupBookingFlow } from '@/components/group-booking-flow';
+import { SingleMultiMasterFlow } from '@/components/single-multi-master-flow';
 
 type Service = {
   id: string;
@@ -70,7 +71,7 @@ function BookingModeSelector({
   selectedBranchId,
   onBranchChange,
 }: {
-  onSelect: (mode: 'single' | 'group') => void;
+  onSelect: (mode: 'single' | 'group' | 'multi') => void;
   salonName: string;
   logoUrl: string;
   bannerUrl: string;
@@ -190,6 +191,24 @@ function BookingModeSelector({
               </span>
             </div>
           </button>
+
+          <button
+            type="button"
+            onClick={() => onSelect('multi')}
+            className="flex w-full items-start gap-4 rounded-2xl border border-line bg-card p-5 text-left transition hover:border-primary"
+          >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface text-2xl text-ink">
+              ✨
+            </div>
+            <div className="min-w-0 flex-1">
+              <b className="block text-base font-semibold text-ink">
+                Разные мастера
+              </b>
+              <span className="mt-1 block text-sm text-muted">
+                Хочу несколько услуг у разных мастеров (например, стрижка и маникюр)
+              </span>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -286,8 +305,8 @@ function BookingFlow() {
   const slug = searchParams.get('slug') || '';
   const step = parseStep(searchParams.get('step'));
   const modeParam = searchParams.get('mode');
-  const mode: 'single' | 'group' | null =
-    modeParam === 'single' || modeParam === 'group' ? modeParam : null;
+  const mode: 'single' | 'group' | 'multi' | null =
+    modeParam === 'single' || modeParam === 'group' || modeParam === 'multi' ? modeParam : null;
 
   const [salon, setSalon] = useState<SalonData | null>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'not_found' | 'gone'>('loading');
@@ -308,7 +327,7 @@ function BookingFlow() {
   // ---------- URL helpers ----------
   const pushURL = useCallback(
     (
-      next: { step?: number; mode?: 'single' | 'group' | null },
+      next: { step?: number; mode?: 'single' | 'group' | 'multi' | null },
       opts?: { replace?: boolean }
     ) => {
       const params = new URLSearchParams(Array.from(searchParams.entries()));
@@ -535,7 +554,7 @@ function BookingFlow() {
   // ---------- Guard jumps ----------
   useEffect(() => {
     if (status !== 'ok' || !salon) return;
-    if (mode === null || mode === 'group') return;
+    if (mode !== 'single') return;
     if (step >= 2 && draft.serviceIds.length === 0) goToStep(1);
     else if (step >= 3 && !draft.masterId) goToStep(2);
     else if (step >= 4 && (!draft.date || !draft.slot)) goToStep(3);
@@ -688,6 +707,20 @@ function BookingFlow() {
         salon={salon}
         slug={slug}
         step={groupStep}
+        onStepChange={(n) => pushURL({ step: n })}
+        onStepReplace={(n) => pushURL({ step: n }, { replace: true })}
+        onExit={() => pushURL({ mode: null, step: 1 })}
+      />
+    );
+  }
+
+  if (mode === 'multi') {
+    const multiStep: 1 | 2 | 3 | 4 = step > 4 ? 4 : (step as 1 | 2 | 3 | 4);
+    return (
+      <SingleMultiMasterFlow
+        salon={salon}
+        slug={slug}
+        step={multiStep}
         onStepChange={(n) => pushURL({ step: n })}
         onStepReplace={(n) => pushURL({ step: n }, { replace: true })}
         onExit={() => pushURL({ mode: null, step: 1 })}
