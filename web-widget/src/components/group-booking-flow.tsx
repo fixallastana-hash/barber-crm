@@ -99,6 +99,7 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [fieldError, setFieldError] = useState<{ fieldId: string; message: string } | null>(null);
   const [success, setSuccess] = useState(false);
 
   const { mode, groupMasterId, people, date, slot, phone, consent } = draft;
@@ -370,6 +371,52 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
     }
   };
 
+  const findFirstError = (): { fieldId: string; message: string } | null => {
+    if (step === 1) {
+      if (mode === 'same-master' && !groupMasterId) {
+        return { fieldId: 'group-master', message: 'Выберите мастера' };
+      }
+      for (let i = 0; i < people.length; i++) {
+        const p = people[i];
+        if (!p.clientName.trim()) return { fieldId: 'group-name-' + i, message: 'Человек ' + (i + 1) + ': введите имя' };
+        if (!p.serviceIds.length) return { fieldId: 'group-services-' + i, message: 'Человек ' + (i + 1) + ': выберите услугу' };
+        if (mode === 'smart' && !p.masterId) return { fieldId: 'group-master-' + i, message: 'Человек ' + (i + 1) + ': выберите мастера' };
+      }
+    }
+    if (step === 2) {
+      if (!date) return { fieldId: 'group-date', message: 'Выберите дату' };
+      if (!slot) return { fieldId: 'group-slots', message: 'Выберите время' };
+    }
+    if (step === 3) {
+      if (!phone.trim()) return { fieldId: 'group-phone', message: 'Введите телефон' };
+      if (!consent) return { fieldId: 'group-consent', message: 'Согласие обязательно' };
+    }
+    return null;
+  };
+
+  const scrollToError = (err: { fieldId: string; message: string }) => {
+    setFieldError(err);
+    setTimeout(() => {
+      const el = document.getElementById(err.fieldId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof (el as HTMLInputElement).focus === 'function') {
+          (el as HTMLInputElement).focus({ preventScroll: true });
+        }
+      }
+    }, 50);
+    setTimeout(() => setFieldError(null), 6000);
+  };
+
+  const handleContinue = (next: 1 | 2 | 3) => {
+    const err = findFirstError();
+    if (err) { scrollToError(err); return; }
+    onStepChange(next);
+  };
+
+  const ring = (id: string) =>
+    fieldError?.fieldId === id ? ' ring-2 ring-red-500 ring-offset-1' : '';
+
   if (success) {
     return (
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
@@ -439,6 +486,12 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
             );
           })}
         </div>
+
+        {fieldError && (
+          <div className="sticky top-2 z-30 mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800 shadow-sm">
+            ⚠ {fieldError.message}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
@@ -668,8 +721,7 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
               </label>
               <button
                 type="submit"
-                disabled={submitting || !consent}
-                className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover"
               >
                 {submitting ? 'Отправляем…' : 'Подтвердить запись'}
               </button>
@@ -683,9 +735,8 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
           <div className="mx-auto w-full max-w-md">
             <button
               type="button"
-              disabled={!isStep1Valid}
-              onClick={() => onStepChange(2)}
-              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => handleContinue(2)}
+              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover"
             >
               Продолжить →
             </button>

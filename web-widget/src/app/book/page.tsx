@@ -321,6 +321,7 @@ function BookingFlow() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [fieldError, setFieldError] = useState<{ fieldId: string; message: string } | null>(null);
 
   const storageKey = 'book_draft_' + slug;
 
@@ -660,6 +661,48 @@ function BookingFlow() {
   };
 
   // ---------- Render ----------
+  const findFirstError = (): { fieldId: string; message: string } | null => {
+    if (step === 1) {
+      if (draft.serviceIds.length === 0) return { fieldId: 'single-step1', message: 'Выберите хотя бы одну услугу' };
+    }
+    if (step === 2) {
+      if (!draft.masterId) return { fieldId: 'single-master', message: 'Выберите мастера' };
+    }
+    if (step === 3) {
+      if (!draft.date) return { fieldId: 'single-date', message: 'Выберите дату' };
+      if (!draft.slot) return { fieldId: 'single-slots', message: 'Выберите время' };
+    }
+    if (step === 4) {
+      if (!draft.name.trim()) return { fieldId: 'single-name', message: 'Введите имя' };
+      if (!draft.phone.trim()) return { fieldId: 'single-phone', message: 'Введите телефон' };
+      if (!draft.consent) return { fieldId: 'single-consent', message: 'Согласие обязательно' };
+    }
+    return null;
+  };
+
+  const scrollToError = (err: { fieldId: string; message: string }) => {
+    setFieldError(err);
+    setTimeout(() => {
+      const el = document.getElementById(err.fieldId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof (el as HTMLInputElement).focus === 'function') {
+          (el as HTMLInputElement).focus({ preventScroll: true });
+        }
+      }
+    }, 50);
+    setTimeout(() => setFieldError(null), 6000);
+  };
+
+  const handleContinue = (next: 1 | 2 | 3 | 4) => {
+    const err = findFirstError();
+    if (err) { scrollToError(err); return; }
+    goToStep(next);
+  };
+
+  const ring = (id: string) =>
+    fieldError?.fieldId === id ? ' ring-2 ring-red-500 ring-offset-1' : '';
+
   if (status === 'loading') return <BookSkeleton />;
 
   if (status === 'gone') {
@@ -798,6 +841,12 @@ function BookingFlow() {
             );
           })}
         </div>
+
+        {fieldError && (
+          <div className="sticky top-2 z-30 mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800 shadow-sm">
+            ⚠ {fieldError.message}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
@@ -1116,7 +1165,7 @@ function BookingFlow() {
               </label>
               <button
                 type="submit"
-                disabled={submitting || !draft.consent}
+                
                 className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? 'Отправляем…' : 'Подтвердить запись'}
@@ -1131,8 +1180,7 @@ function BookingFlow() {
           <div className="mx-auto w-full max-w-md">
             <button
               type="button"
-              disabled={!draft.serviceIds.length}
-              onClick={() => goToStep(2)}
+              onClick={() => handleContinue(2)}
               className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               Продолжить →
