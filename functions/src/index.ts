@@ -2378,6 +2378,7 @@ type GroupPersonInput = {
   clientName?: string;
   masterId?: string;
   serviceIds?: string[];
+    startMinutes?: number;
 };
 
 export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async (request) => {
@@ -2395,7 +2396,9 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + 'T12:00:00Z'))) {
     throw new HttpsError('invalid-argument', 'date required');
   }
-  if (!Number.isInteger(startMinutes) || startMinutes < 0 || startMinutes >= 1440) {
+  const perPerson = people.filter((p) => Number.isInteger(p.startMinutes));
+  const useIndividual = perPerson.length === people.length && people.length > 0;
+  if (!useIndividual && (!Number.isInteger(startMinutes) || startMinutes < 0 || startMinutes >= 1440)) {
     throw new HttpsError('invalid-argument', 'startMinutes required');
   }
   if (mode !== 'same-master' && mode !== 'smart') {
@@ -2471,6 +2474,7 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
       throw new HttpsError('failed-precondition', 'Master does not work on this day');
     }
 
+    const pStart = typeof p.startMinutes === 'number' ? p.startMinutes : 0;
     resolved.push({
       clientName: (p.clientName as string).trim(),
       masterId: pMasterId,
@@ -2481,7 +2485,7 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
       totalPrice,
       bufferMinutes,
       branchId: '',
-      startMinutes: 0,
+      startMinutes: pStart,
       endMinutes: 0,
       ledgerEndMinutes: 0,
     });
@@ -2507,10 +2511,14 @@ export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async 
     let cursor = startMinutes;
     for (const i of indices) {
       const r = resolved[i];
-      r.startMinutes = cursor;
-      r.endMinutes = cursor + r.durationMinutes;
+      if (useIndividual) {
+        r.startMinutes = people[i].startMinutes as number;
+      } else {
+        r.startMinutes = cursor;
+      }
+      r.endMinutes = r.startMinutes + r.durationMinutes;
       r.ledgerEndMinutes = r.endMinutes + r.bufferMinutes;
-      cursor = r.ledgerEndMinutes;
+      if (!useIndividual) cursor = r.ledgerEndMinutes;
     }
   }
 
