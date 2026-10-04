@@ -13,7 +13,7 @@ type GroupPersonInput = {
     startMinutes?: number;
 };
 
-export const widgetCreateGroupAppointment = onCall({ invoker: 'public' }, async (request) => {
+export const widgetCreateGroupAppointment = onCall({ invoker: 'public', enforceAppCheck: true }, async (request) => {
   const data = request.data || {};
   const slug = data.slug;
   const date = data.date;
