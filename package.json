@@ -16,9 +16,14 @@
     "deploy:admin": "firebase deploy --only hosting:admin",
     "deploy:widget": "firebase deploy --only hosting:widget",
     "deploy:functions": "firebase deploy --only functions",
-    "deploy": "firebase deploy"
+    "deploy": "firebase deploy",
+    "test:rules": "pnpm exec firebase emulators:exec --only firestore --project barber-crm-dev \"vitest run tests/rules\""
   },
   "devDependencies": {
-    "prettier": "^3.6.2"
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
+    "firebase-tools": "^15.32.1",
+    "prettier": "^3.6.2",
+    "vitest": "^5.0.3"
   }
 }
