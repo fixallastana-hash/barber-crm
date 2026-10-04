@@ -6,7 +6,7 @@ import { validateWidgetSlug, getWidgetTenantId } from '../common/widget';
 
 // ============ widgetGetSalon (public) ============
 
-export const widgetGetSalon = onCall({ invoker: 'public' }, async (request) => {
+export const widgetGetSalon = onCall({ invoker: 'public', enforceAppCheck: true }, async (request) => {
   const slug = (request.data || {}).slug;
   validateWidgetSlug(slug);
 
@@ -113,7 +113,7 @@ export const widgetGetSalon = onCall({ invoker: 'public' }, async (request) => {
 
 // ============ widgetGetSlots (public) ============
 
-export const widgetGetSlots = onCall({ invoker: 'public' }, async (request) => {
+export const widgetGetSlots = onCall({ invoker: 'public', enforceAppCheck: true }, async (request) => {
   const data = request.data || {};
   const slug = data.slug;
   const masterId = data.masterId;
@@ -183,7 +183,7 @@ export const widgetGetSlots = onCall({ invoker: 'public' }, async (request) => {
 
 // ============ widgetCreateAppointment (public) ============
 
-export const widgetCreateAppointment = onCall({ invoker: 'public' }, async (request) => {
+export const widgetCreateAppointment = onCall({ invoker: 'public', enforceAppCheck: true }, async (request) => {
   const data = request.data || {};
   const slug = data.slug;
   const masterId = data.masterId;
