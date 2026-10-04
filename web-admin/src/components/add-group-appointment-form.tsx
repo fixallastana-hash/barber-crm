@@ -43,6 +43,8 @@ type Props = {
   services: Service[];
   masters: Master[];
   initialDate?: string;
+  initialMasterId?: string;
+  initialStartMinutes?: number;
   onCreated: () => void;
   onClose: () => void;
 };
@@ -59,9 +61,9 @@ function normalizePhone(input: string): string {
 }
 function phoneDigits(input: string) { return input.replace(/\D/g, ''); }
 
-export function AddGroupAppointmentForm({ clients, services, masters, initialDate, onCreated, onClose }: Props) {
+export function AddGroupAppointmentForm({ clients, services, masters, initialDate, initialMasterId, initialStartMinutes, onCreated, onClose }: Props) {
   const [clientBlocks, setClientBlocks] = useState<ClientBlock[]>(() => [
-    { id: uid(), phone: '', name: '', people: [{ masterId: '', serviceIds: [], selectedStart: null }] },
+    { id: uid(), phone: '', name: '', people: [{ masterId: initialMasterId || '', serviceIds: [], selectedStart: null }] },
   ]);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [date, setDate] = useState(initialDate || '');
