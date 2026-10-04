@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFunctions, type Functions } from 'firebase/functions';
-import { initializeAppCheck, ReCaptchaV3Provider, type AppCheck } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
 
 const FUNCTIONS_REGION =
   process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'asia-east1';
@@ -41,7 +41,7 @@ function initAppCheck(a: FirebaseApp): AppCheck | null {
   const siteKey = process.env.NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY;
   if (!siteKey) return null;
   appCheckInstance = initializeAppCheck(a, {
-    provider: new ReCaptchaV3Provider(siteKey),
+    provider: new ReCaptchaEnterpriseProvider(siteKey),
     isTokenAutoRefreshEnabled: true,
   });
   return appCheckInstance;
