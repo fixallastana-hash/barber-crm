@@ -27,7 +27,7 @@ export const autoNoshow = onSchedule(
         .where('status', '==', 'confirmed')
         .get();
 
-      const infoSnap = await db.doc('tenants/' + tenantId + '/config/info').get();
+      const infoSnap = await db.doc('tenants/' + tenantId + '/config/privateConfig').get();
       const noshowThreshold = (infoSnap.data()?.noshowBlockThreshold as number) || 3;
 
       for (const apptDoc of apptsSnap.docs) {

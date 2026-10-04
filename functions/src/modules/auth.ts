@@ -37,12 +37,17 @@ export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
     city: '',
     timezone: 'Asia/Almaty',
     phone: '',
+    isActive: true,
+    createdAt: FieldValue.serverTimestamp(),
+    _schemaVersion: 4,
+  });
+
+  batch.set(db.doc('tenants/' + tenantId + '/config/privateConfig'), {
     cancellationWindowHours: 3,
     reminderHours: [3],
     noshowBlockThreshold: 3,
     requireConfirmation: false,
     pendingConfirmationTimeoutMinutes: 30,
-    isActive: true,
     createdAt: FieldValue.serverTimestamp(),
     _schemaVersion: 4,
   });
@@ -86,23 +91,36 @@ export const updateSalonInfo = onCall(async (request) => {
   requireOwnerOrAdmin(role);
 
   const data = request.data || {};
-  const allowedFields = [
+  const publicFields = [
     'name', 'city', 'phone', 'whatsappBusinessNumber', 'logoUrl', 'dgisUrl',
+  ];
+  const privateFields = [
     'cancellationWindowHours', 'reminderHours', 'noshowBlockThreshold',
     'requireConfirmation', 'pendingConfirmationTimeoutMinutes',
   ];
 
-  const updates: Record<string, unknown> = {};
-  for (const key of allowedFields) {
-    if (data[key] !== undefined) updates[key] = data[key];
+  const publicUpdates: Record<string, unknown> = {};
+  const privateUpdates: Record<string, unknown> = {};
+  for (const key of publicFields) {
+    if (data[key] !== undefined) publicUpdates[key] = data[key];
+  }
+  for (const key of privateFields) {
+    if (data[key] !== undefined) privateUpdates[key] = data[key];
   }
 
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(publicUpdates).length === 0 && Object.keys(privateUpdates).length === 0) {
     throw new HttpsError('invalid-argument', 'No valid fields to update');
   }
 
-  updates['updatedAt'] = FieldValue.serverTimestamp();
-  await db.doc('tenants/' + tenantId + '/config/info').update(updates);
+  const ts = FieldValue.serverTimestamp();
+  if (Object.keys(publicUpdates).length > 0) {
+    publicUpdates['updatedAt'] = ts;
+    await db.doc('tenants/' + tenantId + '/config/info').update(publicUpdates);
+  }
+  if (Object.keys(privateUpdates).length > 0) {
+    privateUpdates['updatedAt'] = ts;
+    await db.doc('tenants/' + tenantId + '/config/privateConfig').update(privateUpdates);
+  }
 
   return { success: true };
 });

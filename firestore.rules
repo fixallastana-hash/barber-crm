@@ -25,6 +25,11 @@ service cloud.firestore {
         allow write: if isOwnerOrAdmin(tenantId);
       }
 
+      match /config/privateConfig {
+        allow read: if isOwnerOrAdmin(tenantId);
+        allow write: if isOwnerOrAdmin(tenantId);
+      }
+
       match /branches/{branchId} {
         allow read: if hasTenant(tenantId);
         allow write: if false;
