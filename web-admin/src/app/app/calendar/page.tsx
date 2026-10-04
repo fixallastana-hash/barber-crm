@@ -63,6 +63,7 @@ export default function CalendarPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [initialMasterId, setInitialMasterId] = useState<string | undefined>();
   const [initialDate, setInitialDate] = useState<string | undefined>();
+  const [initialStartMinutes, setInitialStartMinutes] = useState<number | undefined>();
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
 
@@ -124,9 +125,10 @@ export default function CalendarPage() {
     return () => unsubAppointments();
   }, [user?.tenantId, selectedDate]);
 
-  const openCreateModal = (masterId?: string, date?: string) => {
+  const openCreateModal = (masterId?: string, date?: string, startMinutes?: number) => {
     setInitialMasterId(masterId);
     setInitialDate(date);
+    setInitialStartMinutes(startMinutes);
     setShowCreateModal(true);
   };
 
@@ -227,8 +229,8 @@ export default function CalendarPage() {
                 masters={masters}
                 appointments={appointments}
                 onAppointmentClick={setSelectedAppointment}
-                onEmptySlotClick={(masterId) =>
-                  openCreateModal(masterId, selectedDate)
+                onEmptySlotClick={(masterId, startMinutes) =>
+                  openCreateModal(masterId, selectedDate, startMinutes)
                 }
               />
             </div>
@@ -256,6 +258,7 @@ export default function CalendarPage() {
           tenantId={user.tenantId}
           initialMasterId={initialMasterId}
           initialDate={initialDate}
+          initialStartMinutes={initialStartMinutes}
         />
       )}
 

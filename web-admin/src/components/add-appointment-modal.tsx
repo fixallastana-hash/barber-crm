@@ -13,13 +13,14 @@ type Props = {
   tenantId: string;
   initialMasterId?: string;
   initialDate?: string;
+  initialStartMinutes?: number;
 };
 
 type Client = { id: string; name: string; phoneNormalized?: string; isBlocked?: boolean };
 type Service = { id: string; name: string; durationMinutes: number; priceKzt: number; isActive: boolean; bufferMinutes?: number };
 type Master = { id: string; name: string; isActive: boolean; serviceIds?: string[] };
 
-export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId, initialMasterId, initialDate }: Props) {
+export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId, initialMasterId, initialDate, initialStartMinutes }: Props) {
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [masters, setMasters] = useState<Master[]>([]);
@@ -82,6 +83,8 @@ export function AddAppointmentModal({ isOpen, onClose, onCreated, tenantId, init
             services={services}
             masters={masters}
             initialDate={initialDate}
+            initialMasterId={initialMasterId}
+            initialStartMinutes={initialStartMinutes}
             onCreated={onCreated}
             onClose={onClose}
           />
