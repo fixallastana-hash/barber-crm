@@ -41,13 +41,18 @@ export default function SettingsPage() {
     let cancelled = false;
 
     const db = getFirebaseDb();
-    getDoc(doc(db, 'tenants', user.tenantId, 'config', 'info'))
-      .then((snap) => {
+    Promise.all([
+      getDoc(doc(db, 'tenants', user.tenantId, 'config', 'info')),
+      getDoc(doc(db, 'tenants', user.tenantId, 'config', 'privateConfig')),
+    ])
+      .then(([infoSnap, privSnap]) => {
         if (cancelled) return;
-        if (snap.exists()) {
-          const salonInfo = snap.data() as SalonInfo;
-          setInfo({ ...salonInfo, slotStepMinutes: salonInfo.slotStepMinutes || 15 });
-          setSlug(salonInfo.widgetSlug || '');
+        if (infoSnap.exists()) {
+          const pub = infoSnap.data() as Partial<SalonInfo>;
+          const priv = privSnap.exists() ? (privSnap.data() as Partial<SalonInfo>) : {};
+          const merged = { ...pub, ...priv } as SalonInfo;
+          setInfo({ ...merged, slotStepMinutes: merged.slotStepMinutes || 15 });
+          setSlug(merged.widgetSlug || '');
         }
         setLoading(false);
       })
