@@ -1,12 +1,14 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { db, FieldValue } from '../common/firebase';
 import { requireAuth } from '../common/guards';
+import { enforceRateLimit } from '../common/rateLimit';
 import { dayOfWeekKey, getTenantTimezone, nowInTenantTimezone } from '../common/time';
 import { validateWidgetSlug, getWidgetTenantId } from '../common/widget';
 
 // ============ widgetGetSalon (public) ============
 
 export const widgetGetSalon = onCall({ invoker: 'public', enforceAppCheck: true }, async (request) => {
+  await enforceRateLimit(request, { endpoint: 'widgetGetSalon', limit: 60, windowSec: 60 });
   const slug = (request.data || {}).slug;
   validateWidgetSlug(slug);
 
@@ -114,6 +116,7 @@ export const widgetGetSalon = onCall({ invoker: 'public', enforceAppCheck: true 
 // ============ widgetGetSlots (public) ============
 
 export const widgetGetSlots = onCall({ invoker: 'public', enforceAppCheck: true }, async (request) => {
+  await enforceRateLimit(request, { endpoint: 'widgetGetSlots', limit: 60, windowSec: 60 });
   const data = request.data || {};
   const slug = data.slug;
   const masterId = data.masterId;
@@ -185,6 +188,11 @@ export const widgetGetSlots = onCall({ invoker: 'public', enforceAppCheck: true 
 
 export const widgetCreateAppointment = onCall({ invoker: 'public', enforceAppCheck: true }, async (request) => {
   const data = request.data || {};
+  const clientPhoneRaw = typeof data.clientPhone === 'string' ? data.clientPhone.trim() : '';
+  await enforceRateLimit(request, { endpoint: 'widgetCreateAppointment_ip', limit: 5, windowSec: 3600 });
+  if (clientPhoneRaw) {
+    await enforceRateLimit(request, { endpoint: 'widgetCreateAppointment_phone', limit: 3, windowSec: 3600, keySuffix: clientPhoneRaw });
+  }
   const slug = data.slug;
   const masterId = data.masterId;
   const serviceIds: string[] = Array.isArray(data.serviceIds) ? data.serviceIds : [];

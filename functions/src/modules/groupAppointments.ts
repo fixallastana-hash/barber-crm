@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { db, FieldValue, type DocumentReference, type DocumentSnapshot } from '../common/firebase';
 import { requireAuth, requireOwnerOrAdmin } from '../common/guards';
+import { enforceRateLimit } from '../common/rateLimit';
 import { dayOfWeekKey } from '../common/time';
 import { validateWidgetSlug, getWidgetTenantId } from '../common/widget';
 
@@ -14,6 +15,11 @@ type GroupPersonInput = {
 };
 
 export const widgetCreateGroupAppointment = onCall({ invoker: 'public', enforceAppCheck: true }, async (request) => {
+  await enforceRateLimit(request, { endpoint: 'widgetCreateGroupAppointment_ip', limit: 3, windowSec: 3600 });
+  const _phone = typeof (request.data || {}).clientPhone === 'string' ? (request.data || {}).clientPhone.trim() : '';
+  if (_phone) {
+    await enforceRateLimit(request, { endpoint: 'widgetCreateGroupAppointment_phone', limit: 2, windowSec: 3600, keySuffix: _phone });
+  }
   const data = request.data || {};
   const slug = data.slug;
   const date = data.date;
