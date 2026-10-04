@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { db, FieldValue } from '../common/firebase';
 import { requireAuth } from '../common/guards';
-import { dayOfWeekKey, TENANT_TZ, nowInTenantTimezone } from '../common/time';
+import { dayOfWeekKey, getTenantTimezone, nowInTenantTimezone } from '../common/time';
 import { validateWidgetSlug, getWidgetTenantId } from '../common/widget';
 
 // ============ widgetGetSalon (public) ============
@@ -151,7 +151,8 @@ export const widgetGetSlots = onCall({ invoker: 'public' }, async (request) => {
     ? (ledgerSnap.data()!.slots || [])
     : [];
 
-  const nowInfo = nowInTenantTimezone(TENANT_TZ);
+  const tenantTz = await getTenantTimezone(tenantId);
+  const nowInfo = nowInTenantTimezone(tenantTz);
   const isToday = date === nowInfo.dateStr;
   const minStart = isToday ? nowInfo.minutes : -1;
 

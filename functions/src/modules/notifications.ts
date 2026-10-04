@@ -3,6 +3,7 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { getFunctions } from 'firebase-admin/functions';
 import { db, FieldValue, type DocumentReference, type DocumentSnapshot } from '../common/firebase';
+import { getTenantTimezone, tenantTimeToUtc } from '../common/time';
 
 // ============ autoNoshow (cron every 30 minutes) ============
 
@@ -34,15 +35,8 @@ export const autoNoshow = onSchedule(
         const dateStr = appt.date as string;
         const startMinutes = appt.startMinutes as number;
 
-        const [y, m, d] = dateStr.split('-').map(Number);
-        const startUtc = Date.UTC(
-          y,
-          m - 1,
-          d,
-          Math.floor(startMinutes / 60) - 5,
-          startMinutes % 60
-        );
-        const startDate = new Date(startUtc);
+        const tenantTz = await getTenantTimezone(tenantId);
+        const startDate = tenantTimeToUtc(dateStr, startMinutes, tenantTz);
 
         if (startDate.getTime() >= cutoff.getTime()) {
           continue;
