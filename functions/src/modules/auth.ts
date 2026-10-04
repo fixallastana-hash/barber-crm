@@ -16,7 +16,7 @@ export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
   if (!email) throw new HttpsError('invalid-argument', 'email is required');
   if (!password) throw new HttpsError('invalid-argument', 'password is required');
 
-  let userRecord;
+  let userRecord: Awaited<ReturnType<typeof auth.createUser>>;
   try {
     userRecord = await auth.createUser({ email, password });
   } catch (err) {
@@ -66,8 +66,17 @@ export const registerSalon = onCall({ invoker: 'public' }, async (request) => {
     createdAt: FieldValue.serverTimestamp(),
   });
 
-  await batch.commit();
-  await auth.setCustomUserClaims(uid, { tenantId: tenantId, role: 'owner' });
+  try {
+    await batch.commit();
+    await auth.setCustomUserClaims(uid, { tenantId: tenantId, role: 'owner' });
+  } catch (err) {
+    try {
+      await auth.deleteUser(uid);
+    } catch {
+      /* ignore rollback failure */
+    }
+    throw new HttpsError('internal', 'Registration failed, please try again');
+  }
 
   return { success: true, tenantId: tenantId, uid: uid };
 });
