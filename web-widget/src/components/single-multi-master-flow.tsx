@@ -330,6 +330,9 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
       if (code === 'aborted' || e2.message?.includes('slot_taken')) {
         setError('Один из слотов только что заняли. Выберите время заново.');
         onStepChange(3);
+      } else if (code === 'resource-exhausted') {
+        setError('Слишком много попыток записи. Попробуйте через час или позвоните в салон.');
+        onStepChange(3);
       } else if (code === 'permission-denied') {
         setError('Онлайн-запись недоступна, позвоните в салон.');
       } else setError('Ошибка: ' + (e2.message || 'неизвестная'));

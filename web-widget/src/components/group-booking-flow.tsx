@@ -339,6 +339,9 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
       if (code === 'aborted' || e2.message?.includes('slot_taken')) {
         setError('Это время только что заняли. Выберите другое.');
         onStepChange(2);
+      } else if (code === 'resource-exhausted') {
+        setError('Слишком много попыток записи. Попробуйте через час или позвоните в салон.');
+        onStepChange(2);
       } else if (code === 'permission-denied') {
         setError('Онлайн-запись недоступна, позвоните в салон.');
       } else {
