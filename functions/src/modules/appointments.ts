@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { db, FieldValue } from '../common/firebase';
 import { requireAuth, requireOwnerOrAdmin } from '../common/guards';
-import { timeToMinutes, dayOfWeekKey, TENANT_TZ, nowInTenantTimezone } from '../common/time';
+import { timeToMinutes, dayOfWeekKey, getTenantTimezone, nowInTenantTimezone } from '../common/time';
 
 // ============ getAvailableSlots ============
 
@@ -37,7 +37,8 @@ export const getAvailableSlots = onCall(async (request) => {
     ? (ledgerSnap.data()!.slots || [])
     : [];
 
-  const nowInfo = nowInTenantTimezone(TENANT_TZ);
+  const tenantTz = await getTenantTimezone(tenantId);
+  const nowInfo = nowInTenantTimezone(tenantTz);
   const isToday = date === nowInfo.dateStr;
   const minStart = isToday ? nowInfo.minutes : -1;
 
