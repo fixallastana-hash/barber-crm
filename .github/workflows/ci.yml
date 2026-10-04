@@ -48,6 +48,9 @@ jobs:
       - name: Test firestore rules
         run: pnpm test:rules
 
+      - name: Smoke test appointments/finance
+        run: pnpm test:smoke
+
       - name: Build functions
         run: pnpm --filter functions build
 
