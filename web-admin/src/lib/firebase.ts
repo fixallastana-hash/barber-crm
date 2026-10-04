@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getFunctions, type Functions } from 'firebase/functions';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
 
 const FUNCTIONS_REGION =
   process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'asia-east1';
@@ -29,12 +30,26 @@ let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
 let dbInstance: Firestore | null = null;
 let functionsInstance: Functions | null = null;
+let appCheckInstance: AppCheck | null = null;
 
 function getFirebaseApp(): FirebaseApp {
   if (!app) {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    initAppCheck(app);
   }
   return app;
+}
+
+function initAppCheck(a: FirebaseApp): AppCheck | null {
+  if (appCheckInstance) return appCheckInstance;
+  if (typeof window === 'undefined') return null;
+  const siteKey = process.env.NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY;
+  if (!siteKey) return null;
+  appCheckInstance = initializeAppCheck(a, {
+    provider: new ReCaptchaEnterpriseProvider(siteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+  return appCheckInstance;
 }
 
 export function getFirebaseAuth(): Auth {
