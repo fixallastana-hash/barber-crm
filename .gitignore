@@ -34,3 +34,7 @@ web-admin-backup/
 out/
 .next/
 *-before-*.txt
+
+# Firebase emulator logs
+firestore-debug.log
+ui-debug.log
