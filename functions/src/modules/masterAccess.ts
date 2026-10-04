@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { db, FieldValue } from '../common/firebase';
 import { requireAuth, requireOwnerOrAdmin } from '../common/guards';
+import { generateToken, hashToken, tokenExpiresAt, findMasterByToken } from '../common/masterToken';
 
 // ============ generateMasterToken ============
 
@@ -20,15 +21,19 @@ export const generateMasterToken = onCall(async (request) => {
     throw new HttpsError('not-found', 'Master not found');
   }
 
-  const crypto = await import('crypto');
-  const token = crypto.randomBytes(24).toString('hex');
+  const token = generateToken();
+  const tokenHash = hashToken(token);
+  const expiresAt = tokenExpiresAt();
 
   await masterRef.update({
-    accessToken: token,
+    accessToken: FieldValue.delete(),
+    accessTokenHash: tokenHash,
+    accessTokenExpiresAt: expiresAt,
+    accessTokenLastUsedAt: null,
     accessTokenGeneratedAt: FieldValue.serverTimestamp(),
   });
 
-  return { success: true, token };
+  return { success: true, token, expiresAt: expiresAt.toMillis() };
 });
 
 // ============ getMasterSchedule (public, by token) ============
@@ -48,21 +53,12 @@ export const getMasterSchedule = onCall(
       throw new HttpsError('invalid-argument', 'dateFrom and dateTo required');
     }
 
-    const mastersSnap = await db
-      .collectionGroup('masters')
-      .where('accessToken', '==', token)
-      .limit(1)
-      .get();
-
-    if (mastersSnap.empty) {
-      throw new HttpsError('not-found', 'Invalid token');
+    const found = await findMasterByToken(token);
+    if (!found) {
+      throw new HttpsError('not-found', 'Invalid or expired token');
     }
 
-    const masterDoc = mastersSnap.docs[0];
-    const master = masterDoc.data();
-    const masterId = masterDoc.id;
-    const pathParts = masterDoc.ref.path.split('/');
-    const tenantId = pathParts[1];
+    const { masterId, tenantId, data: master } = found;
 
     if (!master.isActive) {
       throw new HttpsError('permission-denied', 'Master is not active');

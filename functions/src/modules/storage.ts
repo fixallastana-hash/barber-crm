@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getStorage } from 'firebase-admin/storage';
 import { db, FieldValue } from '../common/firebase';
 import { requireAuth, requireOwnerOrAdmin } from '../common/guards';
+import { findMasterByToken } from '../common/masterToken';
 
 // ============ uploadMasterPhoto ============
 
@@ -24,18 +25,10 @@ export const uploadMasterPhoto = onCall(
       throw new HttpsError('invalid-argument', 'Photo too large (max 2MB)');
     }
 
-    const mastersSnap = await db
-      .collectionGroup('masters')
-      .where('accessToken', '==', token)
-      .limit(1)
-      .get();
+    const found = await findMasterByToken(token);
+    if (!found) throw new HttpsError('not-found', 'Invalid or expired token');
 
-    if (mastersSnap.empty) throw new HttpsError('not-found', 'Invalid token');
-
-    const masterDoc = mastersSnap.docs[0];
-    const pathParts = masterDoc.ref.path.split('/');
-    const tenantId = pathParts[1];
-    const masterId = masterDoc.id;
+    const { masterId, tenantId } = found;
 
     const bucket = getStorage().bucket();
     const filePath = 'master-photos/' + tenantId + '/' + masterId + '.jpg';
@@ -50,7 +43,7 @@ export const uploadMasterPhoto = onCall(
 
     const photoUrl = 'https://storage.googleapis.com/' + bucket.name + '/' + filePath;
 
-    await masterDoc.ref.update({ photoUrl });
+    await db.doc('tenants/' + tenantId + '/masters/' + masterId).update({ photoUrl });
 
     return { success: true, photoUrl };
   }
