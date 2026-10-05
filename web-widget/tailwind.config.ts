@@ -1,5 +1,4 @@
 import type { Config } from 'tailwindcss';
-import defaultTheme from 'tailwindcss/defaultTheme';
 
 const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
@@ -17,14 +16,6 @@ const config: Config = {
         muted: 'var(--widget-muted)',
         success: 'var(--widget-success)',
         danger: 'var(--widget-danger)',
-        accent: {
-          DEFAULT: 'var(--accent)',
-          hover: 'var(--accent-hover)',
-        },
-      },
-      fontFamily: {
-        sans: ['Manrope', 'var(--font-inter)', ...defaultTheme.fontFamily.sans],
-        heading: ['Syne', ...defaultTheme.fontFamily.sans],
       },
     },
   },
