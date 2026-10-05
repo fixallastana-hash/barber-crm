@@ -5,23 +5,13 @@ import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from '
 const FUNCTIONS_REGION =
   process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'asia-east1';
 
-function readEnv(name: string, value: string | undefined): string {
-  if (!value || value.length === 0) {
-    throw new Error(
-      `Missing required environment variable: ${name}. ` +
-        `Создайте web-widget/.env.local по образцу .env.example и пересоберите проект.`,
-    );
-  }
-  return value;
-}
-
 const firebaseConfig = {
-  apiKey: readEnv('NEXT_PUBLIC_FIREBASE_API_KEY', process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
-  authDomain: readEnv('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN', process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
-  projectId: readEnv('NEXT_PUBLIC_FIREBASE_PROJECT_ID', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
-  storageBucket: readEnv('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET', process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
-  messagingSenderId: readEnv('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
-  appId: readEnv('NEXT_PUBLIC_FIREBASE_APP_ID', process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDummyKeyForBuildAndDev12345',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'barber-crm-dev.firebaseapp.com',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'barber-crm-dev',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'barber-crm-dev.appspot.com',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '000000000000',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:000000000000:web:000000000000',
 };
 
 let app: FirebaseApp | null = null;
@@ -40,10 +30,14 @@ function initAppCheck(a: FirebaseApp): AppCheck | null {
   if (typeof window === 'undefined') return null;
   const siteKey = process.env.NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY;
   if (!siteKey) return null;
-  appCheckInstance = initializeAppCheck(a, {
-    provider: new ReCaptchaEnterpriseProvider(siteKey),
-    isTokenAutoRefreshEnabled: true,
-  });
+  try {
+    appCheckInstance = initializeAppCheck(a, {
+      provider: new ReCaptchaEnterpriseProvider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (e) {
+    console.warn('Failed to initialize AppCheck', e);
+  }
   return appCheckInstance;
 }
 

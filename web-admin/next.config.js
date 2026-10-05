@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'export',
+  output: 'standalone',
+  transpilePackages: ['@barber/shared'],
   images: {
     unoptimized: true,
   },

@@ -17,9 +17,14 @@ const config: Config = {
         muted: 'var(--widget-muted)',
         success: 'var(--widget-success)',
         danger: 'var(--widget-danger)',
+        accent: {
+          DEFAULT: 'var(--accent)',
+          hover: 'var(--accent-hover)',
+        },
       },
       fontFamily: {
-        sans: ['var(--font-inter)', ...defaultTheme.fontFamily.sans],
+        sans: ['Manrope', 'var(--font-inter)', ...defaultTheme.fontFamily.sans],
+        heading: ['Syne', ...defaultTheme.fontFamily.sans],
       },
     },
   },

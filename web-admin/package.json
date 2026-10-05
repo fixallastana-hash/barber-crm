@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev -p 3000 -H 0.0.0.0",
     "build": "next build",
-    "start": "next start -p 3000",
+    "start": "next start -p 3000 -H 0.0.0.0",
     "lint": "next lint"
   },
   "dependencies": {
-    "@barber/shared": "workspace:*",
+    "@barber/shared": "*",
     "firebase": "^12.19.0",
     "next": "14.2.35",
     "react": "^18.3.1",
