@@ -1,14 +1,10 @@
-import type { Metadata } from 'next';
+﻿import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 
 export const metadata: Metadata = {
   title: 'Barber CRM Admin',
-  description: 'Административная панель для управления салоном красоты и барбершопом',
-  openGraph: {
-    title: 'Barber CRM Admin',
-    description: 'Административная панель для управления салоном красоты и барбершопом',
-  },
+  description: 'Административная панель',
 };
 
 export default function RootLayout({
