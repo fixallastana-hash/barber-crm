@@ -7,6 +7,8 @@ import { getFirebaseFunctions } from '@/lib/firebase';
 import { BookSkeleton } from '@/components/book-skeleton';
 import { GroupBookingFlow } from '@/components/group-booking-flow';
 import { SingleMultiMasterFlow } from '@/components/single-multi-master-flow';
+import { DateStrip } from '@/components/date-strip';
+import { formatKzPhone } from '@/lib/format-phone';
 
 type Service = {
   id: string;
@@ -64,22 +66,68 @@ const dateRu = (s: string) =>
     : '';
 
 /* =========================================================================
+   ИКОНКИ SVG
+   ========================================================================= */
+const IconScissors = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <circle cx="6" cy="6" r="3" /><path d="M8.12 8.12 12 12" /><path d="M20 4 8.12 15.88" />
+    <circle cx="6" cy="18" r="3" /><path d="M14.8 14.8 20 20" />
+  </svg>
+);
+
+const IconClock = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+
+const IconShieldCheck = ({ className = 'w-5 h-5' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+);
+
+const IconSparkles = ({ className = 'w-5 h-5' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+  </svg>
+);
+
+const IconSunMoon = ({ isDark, onToggle }: { isDark: boolean; onToggle: () => void }) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    title={isDark ? 'Переключить на светлую тему' : 'Переключить на тёмную тему'}
+    className="h-9 w-9 rounded-full border border-line bg-card flex items-center justify-center text-xs text-muted hover:text-ink transition-colors shadow-sm"
+  >
+    {isDark ? '☀️' : '🌙'}
+  </button>
+);
+
+/* =========================================================================
    ВХОД / ВЫБОР РЕЖИМА ЗАПИСИ
    ========================================================================= */
 function BookingModeSelector({
   onSelect,
   salonName,
   logoUrl,
+  bannerUrl,
   branches,
   selectedBranchId,
   onBranchChange,
+  isDark,
+  onToggleTheme,
 }: {
   onSelect: (mode: 'single' | 'group' | 'multi') => void;
   salonName: string;
   logoUrl: string;
+  bannerUrl: string;
   branches: Branch[];
   selectedBranchId: string;
   onBranchChange: (id: string) => void;
+  isDark: boolean;
+  onToggleTheme: () => void;
 }) {
   const [branchModalOpen, setBranchModalOpen] = useState(false);
   const selectedBranch = branches.find((b) => b.id === selectedBranchId) || branches[0] || null;
@@ -88,28 +136,55 @@ function BookingModeSelector({
   return (
     <main className="min-h-screen bg-surface">
       <div className="mx-auto w-full max-w-md pb-8">
-        <header className="mb-6 flex items-start justify-between gap-3 px-4 pt-6">
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold tracking-tight text-ink">
-              {salonName}
-            </h1>
+        {/* Атмосферный Hero с фото-фоном */}
+        <header
+          className="relative px-5 pt-8 pb-12 overflow-hidden"
+          style={
+            bannerUrl
+              ? {
+                  backgroundImage: `url(${bannerUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }
+              : { backgroundColor: '#16171B' }
+          }
+        >
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/50 to-black/30" aria-hidden="true" />
+
+          {/* Верхняя панель: статус и переключатель темы */}
+          <div className="relative z-10 flex items-center justify-between mb-6">
+            <span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-semibold tracking-wider text-primary uppercase">
+              Premium Gentlemen Salon
+            </span>
+            <IconSunMoon isDark={isDark} onToggle={onToggleTheme} />
           </div>
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoUrl}
-              alt={salonName}
-              className="h-12 w-12 shrink-0 rounded-xl object-cover"
-            />
-          ) : (
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-base font-bold text-card">
-              {salonName.charAt(0).toUpperCase() || 'B'}
+
+          <div className="relative z-10 flex items-center gap-4">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt={salonName}
+                className="h-18 w-18 shrink-0 rounded-2xl border-2 border-primary object-cover shadow-xl"
+              />
+            ) : (
+              <div className="flex h-18 w-18 shrink-0 items-center justify-center rounded-2xl border-2 border-primary bg-[#16171B] text-2xl font-bold text-primary shadow-xl">
+                {salonName.charAt(0).toUpperCase() || 'B'}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-primary block mb-0.5">
+                Клубный сервис
+              </span>
+              <h1 className="text-2xl font-bold tracking-tight text-white leading-tight font-serif drop-shadow-md">
+                {salonName}
+              </h1>
             </div>
-          )}
+          </div>
         </header>
 
         {/* Блок филиала */}
-        <div className="px-4 pb-4">
+        <div className="-mt-5 rounded-t-3xl bg-surface px-5 pb-4 pt-5 border-t border-line">
           {selectedBranch && (
             <button
               type="button"
@@ -298,6 +373,35 @@ function BookingFlow() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [fieldError, setFieldError] = useState<{ fieldId: string; message: string } | null>(null);
+
+  // Поддержка переключения тем (Light Warm Linen / Dark Luxury)
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem('widget_theme');
+      if (savedTheme === 'dark') {
+        setIsDark(true);
+        document.documentElement.classList.add('theme-dark');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    setIsDark((prev) => {
+      const next = !prev;
+      if (next) {
+        document.documentElement.classList.add('theme-dark');
+        try { localStorage.setItem('widget_theme', 'dark'); } catch { /* ignore */ }
+      } else {
+        document.documentElement.classList.remove('theme-dark');
+        try { localStorage.setItem('widget_theme', 'light'); } catch { /* ignore */ }
+      }
+      return next;
+    });
+  };
 
   const storageKey = 'book_draft_' + slug;
 
@@ -710,9 +814,12 @@ function BookingFlow() {
         onSelect={(m) => pushURL({ mode: m, step: 1 })}
         salonName={salon.tenant.name}
         logoUrl={salon.tenant.logoUrl || ''}
+        bannerUrl={salon.tenant.bannerUrl || ''}
         branches={salon.branches}
         selectedBranchId={selectedBranchId}
         onBranchChange={handleBranchChange}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
       />
     );
   }
@@ -753,31 +860,40 @@ function BookingFlow() {
     const chosenTime = draft.slot?.time || '';
     const masterObj = salon.masters.find((m) => m.id === (draft.masterId === ANY_MASTER ? draft.assignedMasterId : draft.masterId));
 
+    // Ссылка на добавление в Google Calendar
+    const calendarTitle = encodeURIComponent(`Запись в ${salon.tenant.name}`);
+    const calendarDetails = encodeURIComponent(`Услуги: ${salon.services.filter((s) => draft.serviceIds.includes(s.id)).map((s) => s.name).join(', ')}\nМастер: ${masterObj?.name || ''}`);
+    const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calendarTitle}&details=${calendarDetails}`;
+
     return (
       <main className="flex min-h-screen items-center justify-center px-4 py-8 bg-surface">
-        <div className="w-full max-w-md rounded-2xl border border-line bg-card p-6 sm:p-8 text-center shadow-sm">
-          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold">
+        <div className="w-full max-w-md rounded-3xl border border-line bg-card p-6 sm:p-8 text-center shadow-2xl">
+          {/* Анимированная галочка */}
+          <div className="mx-auto h-20 w-20 rounded-full border-2 border-primary bg-primary/10 flex items-center justify-center text-primary text-3xl font-bold shadow-[0_0_30px_rgba(197,168,128,0.25)] animate-bounce duration-1000">
             ✓
           </div>
 
-          <div className="mt-4">
-            <h1 className="text-2xl font-bold tracking-tight text-ink">
-              Вы записаны!
+          <div className="mt-6">
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary block mb-1">
+              Запись подтверждена • Онлайн
+            </span>
+            <h1 className="text-2xl font-bold tracking-tight text-ink font-serif">
+              Ждём вас в клубе!
             </h1>
-            <p className="mt-1 text-sm text-muted">
-              Подробности отправлены в WhatsApp
+            <p className="mt-1.5 text-xs text-muted max-w-xs mx-auto">
+              Подробности визита и напоминание отправлены вам в WhatsApp
             </p>
           </div>
 
           {/* Карточка деталей */}
-          <div className="mt-6 rounded-xl border border-line bg-surface p-4 text-left space-y-2.5 text-xs">
+          <div className="mt-6 rounded-2xl border border-line bg-surface p-4 text-left space-y-3 text-xs">
             <div className="flex justify-between items-center pb-2 border-b border-line">
               <span className="text-muted">Салон:</span>
               <b className="text-ink font-semibold">{salon.tenant.name}</b>
             </div>
             <div className="flex justify-between items-center pb-2 border-b border-line">
               <span className="text-muted">Мастер:</span>
-              <b className="text-ink font-semibold">{masterObj?.name || 'Мастер'}</b>
+              <b className="text-ink font-semibold">{masterObj?.name || 'Мастер клуба'}</b>
             </div>
             <div className="flex justify-between items-center pb-2 border-b border-line">
               <span className="text-muted">Дата и время:</span>
@@ -791,7 +907,17 @@ function BookingFlow() {
             </div>
           </div>
 
-          <div className="mt-6">
+          {/* Кнопки действий */}
+          <div className="mt-6 space-y-3">
+            <a
+              href={calendarUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-card text-xs font-semibold text-ink hover:bg-surface transition-colors shadow-sm"
+            >
+              📅 Добавить в Google Calendar
+            </a>
+
             <button
               type="button"
               onClick={() => {
@@ -799,7 +925,7 @@ function BookingFlow() {
                 setSuccess(false);
                 pushURL({ mode: null, step: 1 });
               }}
-              className="w-full h-12 rounded-xl bg-primary text-white font-semibold text-sm transition hover:bg-primary-hover"
+              className="w-full h-12 rounded-2xl bg-primary text-white font-bold text-xs tracking-wide transition-transform active:scale-[0.98] shadow-md"
             >
               Вернуться на главную
             </button>
@@ -828,10 +954,10 @@ function BookingFlow() {
           >
             ← Назад
           </button>
-          <h1 className="min-w-0 truncate text-sm font-bold tracking-tight text-ink text-center">
+          <h1 className="min-w-0 truncate text-sm font-bold tracking-tight text-ink font-serif text-center">
             {salon.tenant.name}
           </h1>
-          <div className="w-9" />
+          <IconSunMoon isDark={isDark} onToggle={toggleTheme} />
         </header>
 
         {/* Индикатор шагов */}
@@ -919,37 +1045,53 @@ function BookingFlow() {
               {services.map((s) => {
                 const checked = draft.serviceIds.includes(s.id);
                 return (
-                  <button
+                  <div
                     key={s.id}
-                    type="button"
                     onClick={() => toggleService(s.id)}
-                    className={`flex w-full items-center gap-3 rounded-2xl border bg-card p-4 text-left transition ${
+                    className={`rounded-2xl p-3.5 transition-all duration-200 cursor-pointer border ${
                       checked
-                        ? 'border-primary shadow-sm'
-                        : 'border-line hover:border-ink/30'
+                        ? 'border-2 border-primary bg-card shadow-md'
+                        : 'border-line bg-card hover:border-ink/20 shadow-sm'
                     }`}
                   >
-                    <span
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition ${
-                        checked
-                          ? 'border-primary bg-primary text-card'
-                          : 'border-line bg-card text-transparent'
-                      }`}
-                    >
-                      ✓
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <b className="block truncate text-base font-semibold text-ink">
-                        {s.name}
-                      </b>
-                      <small className="mt-0.5 block text-sm text-muted">
-                        {s.durationMinutes} мин
-                      </small>
-                    </span>
-                    <strong className="shrink-0 text-base font-semibold text-ink">
-                      {money(s.priceKzt)}
-                    </strong>
-                  </button>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                            checked
+                              ? 'bg-primary text-white'
+                              : 'bg-surface text-primary border border-line'
+                          }`}
+                        >
+                          <IconScissors className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-[13px] font-bold text-ink leading-snug">
+                            {s.name}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-muted">
+                            <IconClock className="w-3 h-3" />
+                            <span>{s.durationMinutes} мин</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-sm font-bold text-primary tabular-nums block">
+                          {money(s.priceKzt)}
+                        </span>
+                        <span
+                          className={`inline-block mt-2 h-5 w-5 rounded-full border flex items-center justify-center text-[10px] ${
+                            checked
+                              ? 'border-primary bg-primary text-white font-bold'
+                              : 'border-line bg-surface'
+                          }`}
+                        >
+                          {checked && '✓'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
               {!services.length && (
@@ -982,25 +1124,22 @@ function BookingFlow() {
               {eligibleMasters.length > 0 && (
                 <div
                   onClick={() => pickMaster(ANY_MASTER)}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                     draft.masterId === ANY_MASTER
-                      ? 'border-primary bg-primary/5'
-                      : 'border-line bg-card hover:border-ink/20'
+                      ? 'border-2 border-primary bg-card shadow-md'
+                      : 'border-line bg-card hover:border-ink/20 shadow-sm'
                   }`}
                 >
-                  <div>
-                    <div className="text-sm font-semibold text-ink">Любой свободный мастер</div>
-                    <div className="text-xs text-muted">Ближайшее доступное окно</div>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-surface border border-line flex items-center justify-center text-primary">
+                      <IconSparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-ink">Любой свободный мастер</div>
+                      <div className="text-[10px] text-muted">Ближайшее доступное окно</div>
+                    </div>
                   </div>
-                  <span
-                    className={`h-5 w-5 rounded-full border flex items-center justify-center text-xs transition-colors shrink-0 ${
-                      draft.masterId === ANY_MASTER
-                        ? 'border-primary bg-primary text-white font-bold'
-                        : 'border-line bg-surface'
-                    }`}
-                  >
-                    {draft.masterId === ANY_MASTER && '✓'}
-                  </span>
+                  <span className="text-[11px] font-semibold text-primary">Быстрее всего →</span>
                 </div>
               )}
 
@@ -1010,46 +1149,58 @@ function BookingFlow() {
                   <div
                     key={m.id}
                     onClick={() => pickMaster(m.id)}
-                    className={`rounded-xl p-3.5 transition-all cursor-pointer border ${
+                    className={`rounded-2xl p-4 transition-all cursor-pointer border ${
                       isSelected
-                        ? 'border-primary bg-primary/5'
-                        : 'border-line bg-card hover:border-ink/20'
+                        ? 'border-2 border-primary bg-card shadow-md'
+                        : 'border-line bg-card hover:border-ink/20 shadow-sm'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3.5">
                         <div className="relative">
                           {m.photoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={m.photoUrl}
                               alt={m.name}
-                              className="h-12 w-12 rounded-xl object-cover"
+                              className="h-14 w-14 rounded-2xl object-cover border-2 border-primary shadow-sm"
                             />
                           ) : (
-                            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-surface border border-line text-base font-bold text-ink">
+                            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-surface border-2 border-primary text-base font-bold text-primary">
                               {m.name.slice(0, 1)}
                             </span>
                           )}
+                          <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-card" />
                         </div>
                         <div>
-                          <div className="text-sm font-semibold text-ink">
+                          <div className="text-[14px] font-bold text-ink tracking-tight">
                             {m.name}
                           </div>
-                          <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted">
+                          <div className="text-xs text-muted">Топ-барбер клуба</div>
+                          <div className="flex items-center gap-1.5 mt-1 text-xs font-semibold text-primary">
                             <span>{rating(m.rating || 0, m.ratingCount || 0)}</span>
                           </div>
                         </div>
                       </div>
 
                       <span
-                        className={`h-5 w-5 rounded-full border flex items-center justify-center text-xs transition-colors shrink-0 ${
+                        className={`h-6 w-6 rounded-full border flex items-center justify-center text-xs transition-colors shrink-0 ${
                           isSelected
                             ? 'border-primary bg-primary text-white font-bold'
                             : 'border-line bg-surface'
                         }`}
                       >
                         {isSelected && '✓'}
+                      </span>
+                    </div>
+
+                    {/* Статус-бейджи */}
+                    <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-line">
+                      <span className="text-[9px] font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                        Топ-барбер
+                      </span>
+                      <span className="text-[9px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                        Стерильный инструмент
                       </span>
                     </div>
                   </div>
@@ -1084,22 +1235,32 @@ function BookingFlow() {
               </p>
             </div>
 
-            {/* Выбор даты */}
+            {/* Горизонтальный DateStrip на 14 дней */}
             <div className="mb-4">
-              <label htmlFor="booking-date" className="block text-xs font-semibold text-muted mb-1.5">
-                Дата
-              </label>
-              <input
-                id="booking-date"
-                type="date"
-                min={new Date().toISOString().split('T')[0]}
-                value={draft.date}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setDraft((prev) => ({ ...prev, date: e.target.value, slot: null }));
-                  }
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-muted uppercase tracking-wider">
+                  Выберите день
+                </span>
+                <label className="text-[11px] text-primary font-semibold cursor-pointer hover:underline flex items-center gap-1">
+                  <span>Другая дата ▾</span>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={draft.date}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setDraft((prev) => ({ ...prev, date: e.target.value, slot: null }));
+                      }
+                    }}
+                    className="sr-only"
+                  />
+                </label>
+              </div>
+              <DateStrip
+                selectedDate={draft.date}
+                onSelectDate={(newDate) => {
+                  setDraft((prev) => ({ ...prev, date: newDate, slot: null }));
                 }}
-                className="h-12 w-full rounded-xl border border-line bg-card px-4 text-sm text-ink outline-none focus:border-primary"
               />
             </div>
 
@@ -1141,21 +1302,22 @@ function BookingFlow() {
 
             {/* Подсказка */}
             <div className="mt-5 flex items-center gap-2.5 p-3 rounded-xl border border-line bg-card text-xs text-muted shadow-sm">
-              <span>🕒 Напоминание придёт в WhatsApp за 24 часа и за 2 часа до визита.</span>
+              <IconClock className="w-4 h-4 text-primary shrink-0" />
+              <span>Напоминание придёт в WhatsApp за 24 часа и за 2 часа до визита.</span>
             </div>
           </section>
         )}
 
         {/* =========================================================================
-           ШАГ 4: ПОДТВЕРЖДЕНИЕ И КОНТАКТЫ
-           ========================================================================= */}
-        {step === 4 && draft.slot && (
+           ШАГ 4: ПОДТВЕРЖДЕНИЕ И КОНТАКТЫ (БЕЗ ПОЖЕЛАНИЙ)
+           ========================================================================= */
+        step === 4 && draft.slot && (
           <section id="single-confirm">
             <div className="mb-3">
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
                 Финальный шаг
               </span>
-              <h2 className="mt-0.5 text-xl font-bold tracking-tight text-ink">
+              <h2 className="mt-0.5 text-xl font-bold tracking-tight text-ink font-serif">
                 Подтверждение записи
               </h2>
               <p className="text-xs text-muted">
@@ -1199,7 +1361,7 @@ function BookingFlow() {
               </div>
             </div>
 
-            {/* Форма */}
+            {/* Форма: Только Имя и Телефон */}
             <form onSubmit={submit} className="space-y-3">
               <div>
                 <label className="text-[11px] font-semibold text-muted block mb-1">
@@ -1224,10 +1386,18 @@ function BookingFlow() {
                   required
                   type="tel"
                   value={draft.phone}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, phone: formatKzPhone(e.target.value) }))}
                   placeholder="+7 (___) ___-__-__"
                   className="h-12 w-full rounded-xl border border-line bg-card px-4 text-xs text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/20 tabular-nums shadow-sm"
                 />
+              </div>
+
+              {/* Trust Badge */}
+              <div className="flex items-center gap-3 p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-xs text-muted shadow-sm">
+                <IconShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>
+                  Оплата в салоне картой или наличными после стрижки. Бесплатная отмена за 2 часа.
+                </span>
               </div>
 
               <label className="flex cursor-pointer items-start gap-2.5 pt-1">
