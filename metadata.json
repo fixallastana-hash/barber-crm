@@ -1,7 +1,0 @@
-{
-  "name": "Barber CRM Admin",
-  "description": "Административная панель для управления салоном красоты и барбершопом",
-  "capabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
