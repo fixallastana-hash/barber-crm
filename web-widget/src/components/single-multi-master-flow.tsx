@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Check, ArrowRight } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
 
@@ -246,7 +247,7 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
 
   const findFirstError = (): FieldError | null => {
     if (step === 1) {
-      if (draft.serviceIds.length === 0) return { fieldId: 'multi-step1', message: 'Выберите хотя бы одну услугу' };
+      if (draft.serviceIds.length < 2) return { fieldId: 'multi-step1', message: 'Для разных мастеров нужно минимум 2 услуги' };
     }
     if (step === 2) {
       for (const sid of draft.serviceIds) {
@@ -346,13 +347,13 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
   const maxDate = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
 
   const ring = (id: string) =>
-    fieldError?.fieldId === id ? ' ring-2 ring-red-500 ring-offset-1' : '';
+    fieldError?.fieldId === id ? '' : '';
 
   if (success) {
     return (
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-3xl text-ink">✓</div>
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary"><Check className="h-8 w-8 text-white" strokeWidth={2.5} /></div>
           <h1 className="mt-5 text-3xl font-semibold tracking-tight text-ink">Запись отправлена</h1>
           <p className="mt-3 text-base leading-6 text-muted">Отлично! Мы свяжемся с вами для подтверждения.</p>
           <button type="button" onClick={onExit} className="mt-6 h-12 w-full rounded-xl border border-line bg-white text-base font-medium text-ink transition hover:border-ink">Готово</button>
@@ -368,49 +369,53 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
           <button type="button" onClick={() => {
             if (step === 1) onExit();
             else onStepChange((step - 1) as 1 | 2 | 3 | 4);
-          }} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-4 text-sm font-medium text-muted transition hover:border-ink hover:text-ink">← Назад</button>
+          }} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-4 text-sm font-medium text-muted transition hover:border-ink hover:text-ink">Назад</button>
           <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-ink">{salon.tenant.name}</h1>
         </header>
 
-        <div className="mb-6 flex items-center gap-1.5">
-          {['Услуги', 'Мастера', 'Время', 'Контакты'].map((label, i) => {
-            const n = (i + 1) as 1 | 2 | 3 | 4;
-            const active = step === n;
-            const done = step > n;
+        <div className="mb-6 flex items-center">
+          {[1, 2, 3, 4].map((n, i) => {
+            const isActive = step >= n;
             return (
-              <div key={label} className="flex flex-1 flex-col items-center gap-1.5">
-                <div className={['flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition', active ? 'bg-primary text-ink' : done ? 'bg-ink text-white' : 'border border-line bg-white text-muted'].join(' ')}>{done ? '✓' : n}</div>
-                <small className={`text-xs font-medium ${active ? 'text-ink' : 'text-muted'}`}>{label}</small>
-              </div>
+              <Fragment key={n}>
+                <div
+                  className={[
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                    isActive
+                      ? 'bg-primary text-white'
+                      : 'border border-line bg-white text-muted',
+                  ].join(' ')}
+                >
+                  {n}
+                </div>
+                {i < 3 && <div className="mx-2 flex-1 border-t border-line" />}
+              </Fragment>
             );
           })}
         </div>
 
         {fieldError && (
-          <div className="sticky top-2 z-30 mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800 shadow-sm">
-            ⚠ {fieldError.message}
-          </div>
+          <p className="mb-4 text-sm font-medium text-red-700">
+            {fieldError.message}
+          </p>
         )}
 
         {error && (
-          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
-            <b className="block font-semibold">Не получилось</b>
-            <span className="mt-0.5 block">{error}</span>
-          </div>
+          <p className="mb-4 text-sm font-medium text-red-700">{error}</p>
         )}
 
         {step === 1 && (
           <section id="multi-step1" className={'rounded-2xl' + ring('multi-step1')}>
             <div className="mb-4">
               <div className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">Шаг 1</div>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ink">Выберите услуги</h2>
-              <p className="mt-1 text-sm text-muted">Можно несколько. Дальше выберете мастера под каждую.</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ink">Выберите 2+ услуги</h2>
+              <p className="mt-1 text-sm text-muted">Для каждой услуги выберете своего мастера на следующем шаге.</p>
             </div>
 
             <div className="mb-3 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
               {salon.categories.map((c) => (
                 <button key={c.id} type="button" onClick={() => setCategoryId(c.id)}
-                  className={['flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition', categoryId === c.id ? 'bg-ink text-white' : 'border border-line bg-white text-muted hover:border-ink hover:text-ink'].join(' ')}>
+                  className={['flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition', categoryId === c.id ? 'bg-primary text-white' : 'border border-line bg-white text-muted hover:border-ink hover:text-ink'].join(' ')}>
                   {c.iconUrl && <img src={c.iconUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />}
                   {c.name}
                 </button>
@@ -423,7 +428,7 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
                 return (
                   <button key={s.id} type="button" onClick={() => toggleService(s.id)}
                     className={['flex w-full items-center gap-3 rounded-2xl border bg-card p-4 text-left transition', checked ? 'border-primary shadow-sm' : 'border-line hover:border-ink/30'].join(' ')}>
-                    <span className={['flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition', checked ? 'border-primary bg-primary text-ink' : 'border-line bg-white text-transparent'].join(' ')}>✓</span>
+                    <span className={['flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition', checked ? 'border-primary bg-primary' : 'border-line bg-white'].join(' ')}></span>
                     <span className="min-w-0 flex-1">
                       <b className="block truncate text-base font-semibold text-ink">{s.name}</b>
                       <small className="mt-0.5 block text-sm text-muted">{s.durationMinutes} мин</small>
@@ -500,7 +505,7 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
                   const slots = slotsByService[s.id] || [];
                   const isErr = fieldError?.fieldId === 'multi-slot-' + s.id;
                   return (
-                    <div key={s.id} id={'multi-slot-' + s.id} className={'rounded-2xl border border-line bg-card p-4' + (isErr ? ' ring-2 ring-red-500 ring-offset-1' : '')}>
+                    <div key={s.id} id={'multi-slot-' + s.id} className={'rounded-2xl border border-line bg-card p-4' + (isErr ? '' : '')}>
                       <b className="block text-base font-semibold text-ink">{s.name}</b>
                       <small className="mt-0.5 block text-sm text-muted">у {m?.name || '—'}</small>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -577,7 +582,7 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
                 <span className="text-sm leading-6 text-muted">Согласен на обработку персональных данных</span>
               </label>
               <button type="submit"
-                className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover">
+                className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-white transition hover:bg-primary-hover">
                 {submitting ? 'Отправляем…' : 'Записаться'}
               </button>
             </form>
@@ -589,8 +594,8 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
         <div className="fixed inset-x-0 bottom-0 border-t border-line bg-card/95 px-4 py-3 backdrop-blur">
           <div className="mx-auto w-full max-w-md">
             <button type="button" onClick={() => handleContinue(2)}
-              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover">
-              Продолжить →
+              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-white transition hover:bg-primary-hover">
+              Продолжить <ArrowRight className="inline h-4 w-4" strokeWidth={2} />
             </button>
           </div>
         </div>
@@ -600,8 +605,8 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
         <div className="fixed inset-x-0 bottom-0 border-t border-line bg-card/95 px-4 py-3 backdrop-blur">
           <div className="mx-auto w-full max-w-md">
             <button type="button" onClick={() => handleContinue(3)}
-              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover">
-              Продолжить →
+              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-white transition hover:bg-primary-hover">
+              Продолжить <ArrowRight className="inline h-4 w-4" strokeWidth={2} />
             </button>
           </div>
         </div>
@@ -611,8 +616,8 @@ export function SingleMultiMasterFlow({ salon, slug, step, onStepChange, onExit 
         <div className="fixed inset-x-0 bottom-0 border-t border-line bg-card/95 px-4 py-3 backdrop-blur">
           <div className="mx-auto w-full max-w-md">
             <button type="button" onClick={() => handleContinue(4)}
-              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover">
-              Продолжить →
+              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-white transition hover:bg-primary-hover">
+              Продолжить <ArrowRight className="inline h-4 w-4" strokeWidth={2} />
             </button>
           </div>
         </div>

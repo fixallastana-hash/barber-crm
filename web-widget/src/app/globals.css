@@ -1,4 +1,4 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -11,13 +11,13 @@
   --master-accent: #17191d;
   --master-green: #198754;
 
-  --widget-primary: #F4C842;
-  --widget-primary-hover: #E5B935;
-  --widget-ink: #1A1A1A;
-  --widget-surface: #FAFAFA;
+  --widget-primary: #8B6F47;
+  --widget-primary-hover: #785E3B;
+  --widget-ink: #171717;
+  --widget-surface: #F7F6F3;
   --widget-card: #FFFFFF;
-  --widget-line: #E5E5E5;
-  --widget-muted: #7A7A7A;
+  --widget-line: #E8E5DF;
+  --widget-muted: #736F69;
   --widget-success: #15803D;
   --widget-danger: #DC2626;
 }

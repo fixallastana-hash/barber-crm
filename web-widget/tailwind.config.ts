@@ -20,6 +20,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ['var(--font-inter)', ...defaultTheme.fontFamily.sans],
+        fraunces: ['var(--font-fraunces)', 'Georgia', 'serif'],
       },
     },
   },
