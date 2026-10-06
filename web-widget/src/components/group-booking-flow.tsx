@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
+import { Check, ArrowRight } from 'lucide-react';
 
 type Service = {
   id: string;
@@ -418,14 +419,14 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
   };
 
   const ring = (id: string) =>
-    fieldError?.fieldId === id ? ' ring-2 ring-red-500 ring-offset-1' : '';
+    fieldError?.fieldId === id ? '' : '';
 
   if (success) {
     return (
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-3xl text-ink">
-            ✓
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary">
+            <Check className="h-8 w-8 text-white" strokeWidth={2.5} />
           </div>
           <div className="mt-5 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
             BARBER CRM
@@ -456,51 +457,41 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
             onClick={handleBack}
             className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-4 text-sm font-medium text-muted transition hover:border-ink hover:text-ink"
           >
-            ← Назад
+            Назад
           </button>
           <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-ink">
             {salon.tenant.name}
           </h1>
         </header>
-
-        <div className="mb-6 flex items-center gap-1.5">
-          {steps.map((label, i) => {
-            const num = i + 1;
-            const active = step === num;
-            const done = step > num;
+        <div className="mb-6 flex items-center">
+          {[1, 2, 3].map((n, i) => {
+            const isActive = step >= n;
             return (
-              <div key={label} className="flex flex-1 flex-col items-center gap-1.5">
+              <Fragment key={n}>
                 <div
                   className={[
-                    'flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition',
-                    active
-                      ? 'bg-primary text-ink'
-                      : done
-                        ? 'bg-ink text-white'
-                        : 'border border-line bg-white text-muted',
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                    isActive
+                      ? 'bg-primary text-white'
+                      : 'border border-line bg-white text-muted',
                   ].join(' ')}
                 >
-                  {done ? '✓' : num}
+                  {n}
                 </div>
-                <small className={`text-xs font-medium ${active ? 'text-ink' : 'text-muted'}`}>
-                  {label}
-                </small>
-              </div>
+                {i < 2 && <div className="mx-2 flex-1 border-t border-line" />}
+              </Fragment>
             );
           })}
         </div>
 
         {fieldError && (
-          <div className="sticky top-2 z-30 mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800 shadow-sm">
-            ⚠ {fieldError.message}
-          </div>
+          <p className="mb-4 text-sm font-medium text-red-700">
+            {fieldError.message}
+          </p>
         )}
 
         {error && (
-          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
-            <b className="block font-semibold">Не получилось</b>
-            <span className="mt-0.5 block">{error}</span>
-          </div>
+          <p className="mb-4 text-sm font-medium text-red-700">{error}</p>
         )}
 
         {step === 1 && (
@@ -524,7 +515,7 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
                   className={
                     'rounded-xl border px-3 py-3 text-sm font-medium transition ' +
                     (mode === 'same-master'
-                      ? 'border-ink bg-ink text-white'
+                      ? 'border-primary bg-primary text-white'
                       : 'border-line bg-white text-muted hover:border-ink hover:text-ink')
                   }
                 >
@@ -536,7 +527,7 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
                   className={
                     'rounded-xl border px-3 py-3 text-sm font-medium transition ' +
                     (mode === 'smart'
-                      ? 'border-ink bg-ink text-white'
+                      ? 'border-primary bg-primary text-white'
                       : 'border-line bg-white text-muted hover:border-ink hover:text-ink')
                   }
                 >
@@ -724,7 +715,7 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
               </label>
               <button
                 type="submit"
-                className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover"
+                className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-white transition hover:bg-primary-hover"
               >
                 {submitting ? 'Отправляем…' : 'Подтвердить запись'}
               </button>
@@ -739,9 +730,9 @@ export function GroupBookingFlow({ salon, slug, step, onStepChange, onStepReplac
             <button
               type="button"
               onClick={() => handleContinue(2)}
-              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover"
+              className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-white transition hover:bg-primary-hover"
             >
-              Продолжить →
+              Продолжить <ArrowRight className="inline h-4 w-4" strokeWidth={2} />
             </button>
           </div>
         </div>
@@ -866,11 +857,10 @@ function PersonCard({ idx, person, salon, mode, onUpdate, onToggleService, onRem
                       className={
                         'flex h-6 w-6 shrink-0 items-center justify-center rounded border text-xs font-bold transition ' +
                         (checked
-                          ? 'border-primary bg-primary text-ink'
+                          ? 'border-primary bg-primary'
                           : 'border-line bg-white text-transparent')
                       }
                     >
-                      ✓
                     </span>
                     <span className="min-w-0 flex-1">
                       <b className="block truncate text-sm font-semibold text-ink">{s.name}</b>

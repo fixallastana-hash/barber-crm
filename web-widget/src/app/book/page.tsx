@@ -1,9 +1,10 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFunctions } from '@/lib/firebase';
+import { Check, ArrowRight, MapPin, ChevronDown } from 'lucide-react';
 import { BookSkeleton } from '@/components/book-skeleton';
 import { GroupBookingFlow } from '@/components/group-booking-flow';
 import { SingleMultiMasterFlow } from '@/components/single-multi-master-flow';
@@ -108,14 +109,14 @@ function BookingModeSelector({
               <img
                 src={logoUrl}
                 alt={salonName}
-                className="h-20 w-20 shrink-0 rounded-full border-4 border-white object-cover"
+                className="h-16 w-16 shrink-0 rounded-xl border border-white/40 object-cover"
               />
             ) : (
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-white text-3xl font-bold text-black">
-                {salonName.charAt(0).toUpperCase() || 'B'}
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-white/40 bg-white/10">
+                <span className="font-fraunces text-2xl font-semibold text-white">{salonName.slice(0, 2).toUpperCase() || "BC"}</span>
               </div>
             )}
-            <h1 className="min-w-0 flex-1 text-2xl font-bold leading-tight tracking-tight text-white drop-shadow-md">
+            <h1 className="font-fraunces min-w-0 flex-1 text-2xl font-medium leading-tight tracking-tight text-white">
               {salonName}
             </h1>
           </div>
@@ -135,19 +136,7 @@ function BookingModeSelector({
                   {selectedBranch.name}
                 </h2>
                 {hasMultipleBranches && (
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="mt-1.5 shrink-0 text-muted"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
+                  <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
                 )}
               </div>
               <p className="mt-1 text-sm text-muted">
@@ -165,9 +154,7 @@ function BookingModeSelector({
             onClick={() => onSelect('single')}
             className="flex w-full items-start gap-4 rounded-2xl border border-line bg-card p-5 text-left transition hover:border-primary"
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface text-2xl text-ink">
-              👤
-            </div>
+            <div className="h-12 w-12 shrink-0 rounded-xl border border-line bg-surface" />
             <div className="min-w-0 flex-1">
               <b className="block text-base font-semibold text-ink">Записать одного</b>
               <span className="mt-1 block text-sm text-muted">Обычная запись для себя</span>
@@ -179,9 +166,7 @@ function BookingModeSelector({
             onClick={() => onSelect('group')}
             className="flex w-full items-start gap-4 rounded-2xl border-2 border-primary bg-primary/5 p-5 text-left transition hover:bg-primary/10"
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-2xl text-ink">
-              👨‍👩‍👧
-            </div>
+            <div className="h-12 w-12 shrink-0 rounded-xl border border-primary bg-surface" />
             <div className="min-w-0 flex-1">
               <b className="block text-base font-semibold text-ink">
                 Записать нескольких (2–6)
@@ -197,9 +182,7 @@ function BookingModeSelector({
             onClick={() => onSelect('multi')}
             className="flex w-full items-start gap-4 rounded-2xl border border-line bg-card p-5 text-left transition hover:border-primary"
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface text-2xl text-ink">
-              ✨
-            </div>
+            <div className="h-12 w-12 shrink-0 rounded-xl border border-line bg-surface" />
             <div className="min-w-0 flex-1">
               <b className="block text-base font-semibold text-ink">
                 Разные мастера
@@ -256,7 +239,7 @@ function BookingModeSelector({
                         {b.city ? `, ${b.city}` : ''}
                       </span>
                     </div>
-                    {active && <span className="mt-1 shrink-0 text-lg text-ink">✓</span>}
+                    {active && <Check className="mt-1 h-4 w-4 shrink-0 text-ink" strokeWidth={2.5} />}
                   </button>
                 );
               })}
@@ -776,7 +759,7 @@ function BookingFlow() {
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-3xl text-ink">
-            ✓
+            <Check className="h-8 w-8 text-ink" strokeWidth={2.5} />
           </div>
           <div className="mt-5 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
             BARBER CRM
@@ -797,7 +780,6 @@ function BookingFlow() {
   const services = salon.services.filter((s) => s.categoryId === draft.categoryId);
   const selectedServices = salon.services.filter((s) => draft.serviceIds.includes(s.id));
   const totalPrice = selectedServices.reduce((sum, s) => sum + s.priceKzt, 0);
-  const steps = ['Услуги', 'Мастер', 'Время', 'Контакты'];
 
   return (
     <main className="min-h-screen bg-surface px-4 py-6 pb-32">
@@ -808,43 +790,37 @@ function BookingFlow() {
             onClick={handleBack}
             className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-4 text-sm font-medium text-muted transition hover:border-ink hover:text-ink"
           >
-            ← Назад
+            Назад
           </button>
           <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-ink">
             {salon.tenant.name}
           </h1>
         </header>
 
-        <div className="mb-6 flex items-center gap-1.5">
-          {steps.map((label, i) => {
-            const n = (i + 1) as 1 | 2 | 3 | 4;
-            const active = step === n;
-            const done = step > n;
+        <div className="mb-6 flex items-center">
+          {[1, 2, 3, 4].map((n, i) => {
+            const isActive = step >= n;
             return (
-              <div key={label} className="flex flex-1 flex-col items-center gap-1.5">
+              <Fragment key={n}>
                 <div
                   className={[
-                    'flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition',
-                    active
-                      ? 'bg-primary text-ink'
-                      : done
-                        ? 'bg-ink text-white'
-                        : 'border border-line bg-white text-muted',
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                    isActive
+                      ? 'bg-primary text-white'
+                      : 'border border-line bg-white text-muted',
                   ].join(' ')}
                 >
-                  {done ? '✓' : n}
+                  {n}
                 </div>
-                <small className={`text-xs font-medium ${active ? 'text-ink' : 'text-muted'}`}>
-                  {label}
-                </small>
-              </div>
+                {i < 3 && <div className="mx-2 flex-1 border-t border-line" />}
+              </Fragment>
             );
           })}
         </div>
 
         {fieldError && (
           <div className="sticky top-2 z-30 mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800 shadow-sm">
-            ⚠ {fieldError.message}
+            {fieldError.message}
           </div>
         )}
 
@@ -927,7 +903,7 @@ function BookingFlow() {
                             : 'border-line bg-white text-transparent',
                         ].join(' ')}
                       >
-                        ✓
+                        <Check className="h-4 w-4 text-white" strokeWidth={2.5} />
                       </span>
                     )}
                     <span className="min-w-0 flex-1">
@@ -982,7 +958,7 @@ function BookingFlow() {
                       Подберём свободного мастера
                     </small>
                   </span>
-                  <i className="shrink-0 text-lg text-muted not-italic">→</i>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
                 </button>
               )}
 
@@ -1013,7 +989,7 @@ function BookingFlow() {
                       {rating(m.rating || 0, m.ratingCount || 0)}
                     </small>
                   </span>
-                  <i className="shrink-0 text-lg text-muted not-italic">→</i>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} />
                 </button>
               ))}
 
@@ -1183,7 +1159,7 @@ function BookingFlow() {
               onClick={() => handleContinue(2)}
               className="h-14 w-full rounded-xl bg-primary text-base font-semibold text-ink transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Продолжить →
+              Продолжить <ArrowRight className="inline h-4 w-4" strokeWidth={2} />
             </button>
           </div>
         </div>
